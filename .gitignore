@@ -1,0 +1,17 @@
+# MetaTrader compiled binaries
+*.ex5
+*.ex4
+*.exp
+*.lib
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.code-workspace
+
+# Local scratch
+*.log
+tmp/
+.cache/
