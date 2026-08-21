@@ -3,8 +3,8 @@
 //|           Production risk guardian for discretionary scalpers    |
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
-#property link      "https://github.com"
-#property version   "1.00"
+#property link      "https://github.com/domsendotnet/mt5-riskguard"
+#property version   "1.01"
 #property strict
 #property description "RiskGuard — auto SL/TP, lot/risk caps, conditional averaging,"
 #property description "basket BE+ exit, time guards, and day lock for MT5 scalpers."
@@ -22,6 +22,7 @@ int OnInit()
    g_cooldownUntil = 0;
    g_lastAction = "initialized";
    g_lastStatusReason = "armed";
+   RG_StateLoad();
 
    if(InpTimerSeconds < 1)
      {
@@ -183,11 +184,16 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 
       if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY || entry == DEAL_ENTRY_INOUT)
         {
-         double profit = HistoryDealGetDouble(deal, DEAL_PROFIT)
-                         + HistoryDealGetDouble(deal, DEAL_SWAP)
-                         + HistoryDealGetDouble(deal, DEAL_COMMISSION);
-         RG_OnDealClosedLoss(profit);
-         RG_UpdateDayState();
+         ulong pos_id = (ulong)HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+         // Ignore partial closes — only full position exits affect day count / cooldown
+         if(entry == DEAL_ENTRY_INOUT || !RG_PositionStillOpen(pos_id))
+           {
+            double profit = HistoryDealGetDouble(deal, DEAL_PROFIT)
+                            + HistoryDealGetDouble(deal, DEAL_SWAP)
+                            + HistoryDealGetDouble(deal, DEAL_COMMISSION);
+            RG_OnDealClosedLoss(profit);
+            RG_UpdateDayState();
+           }
         }
      }
 

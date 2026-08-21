@@ -96,6 +96,8 @@ Lock when:
 
 On lock: optional flatten of all managed positions; new fills closed while locked.
 
+Day stamp, day-start equity, closed-trade count, lock flag, and cooldown timestamp are persisted in terminal **global variables** (per account login) so reloading the EA mid-session does not reset the day lock.
+
 ## Cooldown
 
 A closed deal with negative profit+swap+commission starts a cooldown window. New managed entries during cooldown are closed.

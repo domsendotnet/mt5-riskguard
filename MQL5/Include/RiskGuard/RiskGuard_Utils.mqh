@@ -23,6 +23,50 @@ datetime g_cooldownUntil  = 0;
 datetime g_eaStartTime    = 0;
 
 //+------------------------------------------------------------------+
+int RG_DayStampNow()
+  {
+   MqlDateTime dt;
+   TimeToStruct(TimeTradeServer(), dt);
+   datetime t = TimeTradeServer();
+   if(dt.hour < InpDayResetHourServer)
+      t -= 86400;
+   TimeToStruct(t, dt);
+   return dt.year * 10000 + dt.mon * 100 + dt.day;
+  }
+
+//+------------------------------------------------------------------+
+string RG_StateKey(const string suffix)
+  {
+   return "RG_" + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)) + "_" + suffix;
+  }
+
+//+------------------------------------------------------------------+
+void RG_StateSave()
+  {
+   GlobalVariableSet(RG_StateKey("dayStamp"), (double)g_dayStamp);
+   GlobalVariableSet(RG_StateKey("dayEquity"), g_dayStartEquity);
+   GlobalVariableSet(RG_StateKey("dayTrades"), (double)g_dayClosedTrades);
+   GlobalVariableSet(RG_StateKey("dayLocked"), g_dayLocked ? 1.0 : 0.0);
+   GlobalVariableSet(RG_StateKey("cooldown"), (double)g_cooldownUntil);
+  }
+
+//+------------------------------------------------------------------+
+void RG_StateLoad()
+  {
+   string kStamp = RG_StateKey("dayStamp");
+   if(!GlobalVariableCheck(kStamp))
+      return;
+   int stamp = (int)GlobalVariableGet(kStamp);
+   if(stamp != RG_DayStampNow())
+      return; // stale other day
+   g_dayStamp = stamp;
+   g_dayStartEquity = GlobalVariableGet(RG_StateKey("dayEquity"));
+   g_dayClosedTrades = (int)GlobalVariableGet(RG_StateKey("dayTrades"));
+   g_dayLocked = (GlobalVariableGet(RG_StateKey("dayLocked")) > 0.5);
+   g_cooldownUntil = (datetime)GlobalVariableGet(RG_StateKey("cooldown"));
+  }
+
+//+------------------------------------------------------------------+
 void RG_Log(const int level, const string msg)
   {
    if(!InpLogToExperts)
@@ -51,20 +95,6 @@ double RG_RiskBasis()
    if(InpRiskBase == RG_RISK_BALANCE)
       return AccountInfoDouble(ACCOUNT_BALANCE);
    return AccountInfoDouble(ACCOUNT_EQUITY);
-  }
-
-//+------------------------------------------------------------------+
-int RG_DayStampNow()
-  {
-   MqlDateTime dt;
-   TimeToStruct(TimeTradeServer(), dt);
-   int hour = dt.hour;
-   // shift back if before reset hour
-   datetime t = TimeTradeServer();
-   if(hour < InpDayResetHourServer)
-      t -= 86400;
-   TimeToStruct(t, dt);
-   return dt.year * 10000 + dt.mon * 100 + dt.day;
   }
 
 //+------------------------------------------------------------------+

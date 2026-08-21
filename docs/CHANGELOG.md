@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.01 — 2026-08-21
+
+- Persist day lock / day PnL baseline / trade count / cooldown via terminal global variables
+- Ignore partial closes for day-trade counting and loss cooldown
+- Link `#property` to GitHub repo; version bump
+
 ## 1.00 — 2026-08-21
 
 - Initial production release of RiskGuard for MT5

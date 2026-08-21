@@ -89,8 +89,6 @@ bool RG_ClosePositionTicket(const ulong ticket, const string why)
    if(!g_pos.SelectByTicket(ticket))
       return false;
    string symbol = g_pos.Symbol();
-   if(!g_sym.Name(symbol))
-      g_sym.Refresh();
    g_trade.SetExpertMagicNumber(g_pos.Magic());
    bool ok = g_trade.PositionClose(ticket, InpMaxSlippagePoints);
    if(ok)
@@ -625,6 +623,7 @@ void RG_UpdateDayState()
          g_dayLocked = false;
          RG_Notify("new risk day — lock cleared");
         }
+      RG_StateSave();
      }
 
    if(!InpDayLockEnabled)
@@ -658,6 +657,7 @@ void RG_UpdateDayState()
       g_dayLocked = true;
       g_lastStatusReason = "DAY LOCK: " + why;
       RG_Notify("DAY LOCK — " + why);
+      RG_StateSave();
       if(InpDayLockFlatten)
          RG_FlattenAllManaged("day lock flatten");
      }
@@ -669,6 +669,22 @@ void RG_OnDealClosedLoss(const double deal_profit)
    if(deal_profit < 0.0 && InpCooldownAfterLossSec > 0)
       g_cooldownUntil = TimeTradeServer() + InpCooldownAfterLossSec;
    g_dayClosedTrades++;
+   RG_StateSave();
+  }
+
+//+------------------------------------------------------------------+
+bool RG_PositionStillOpen(const ulong position_id)
+  {
+   if(position_id == 0)
+      return false;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(!g_pos.SelectByIndex(i))
+         continue;
+      if((ulong)g_pos.Identifier() == position_id || g_pos.Ticket() == position_id)
+         return true;
+     }
+   return false;
   }
 
 //+------------------------------------------------------------------+
