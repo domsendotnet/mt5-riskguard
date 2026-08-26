@@ -1,58 +1,73 @@
-# Install & compile
+# Install & compile (RiskGuard 1.11)
 
-## 1. Locate your MT5 data folder
+## 1. Open the MetaTrader data folder
 
-In MetaTrader 5: **File → Open Data Folder**.
+In MT5: **File → Open Data Folder**.
 
-You should see an `MQL5` directory with `Experts`, `Include`, `Scripts`, etc.
+You should see `MQL5` with `Experts`, `Include`, `Scripts`.
 
 ## 2. Copy files
 
-From this repository:
+| From this repository | Into your data folder |
+|----------------------|------------------------|
+| `MQL5/Experts/RiskGuard.mq5` | `MQL5/Experts/RiskGuard.mq5` |
+| `MQL5/Include/RiskGuard/` (all files inside) | `MQL5/Include/RiskGuard/` |
+| `MQL5/Scripts/RiskGuard_SelfTest.mq5` | `MQL5/Scripts/RiskGuard_SelfTest.mq5` |
 
-| Source | Destination |
-|--------|-------------|
-| `MQL5/Experts/RiskGuard.mq5` | `DataFolder/MQL5/Experts/RiskGuard.mq5` |
-| `MQL5/Include/RiskGuard/*` | `DataFolder/MQL5/Include/RiskGuard/` |
-
-Create the `Include/RiskGuard` folder if it does not exist.
-
-> Tip: you can also clone this repo and symlink/copy the `MQL5` tree into the data folder.
+Create `Include/RiskGuard` if it does not exist.
 
 ## 3. Compile
 
 1. Open **MetaEditor** (F4 from MT5).
 2. Open `Experts/RiskGuard.mq5`.
 3. Press **Compile** (F7).
-4. Confirm `0` errors in the Errors tab. A `RiskGuard.ex5` appears next to the source.
+4. Errors tab: **0 errors**. A `RiskGuard.ex5` appears next to the source.
+5. Also compile `Scripts/RiskGuard_SelfTest.mq5`.
 
-If you see `cannot open include file`, the `Include/RiskGuard` path is wrong.
+If you see `cannot open include file`, the `Include/RiskGuard` folder is in the wrong place.
 
-## 4. Attach to chart
+## 4. Attach
 
-1. In MT5 Navigator → **Expert Advisors** → drag **RiskGuard** onto your symbol chart.
-2. In Common tab: enable **Allow Algo Trading**.
-3. In Inputs: review groups (start with defaults, then tune money-per-0.01 to your broker).
-4. Click OK. Toolbar **Algo Trading** button must be green/on.
+1. Navigator → **Expert Advisors** → drag **RiskGuard** onto **XAUUSD M1** (or your symbol).
+2. **Common** tab: tick **Allow Algo Trading**.
+3. **Inputs** tab: groups are numbered **1. Start here** … **10. Pending orders**.  
+   Labels are full sentences. If you are new, change only the “how much you can lose” and stop/target money-per-0.01 numbers, plus **your** commission.  
+   Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)
+4. OK. Toolbar **Algo Trading** must be **green**.
 
-## 5. Verify it is alive
+## 5. Confirm it is alive
 
-You should see the on-chart panel (`RISKGUARD · SYMBOL`) and a log line in the **Experts** tab:
+Chart box: `RISKGUARD · XAUUSD`. Status line should contain **protecting**.
+
+Experts log:
 
 ```text
-RiskGuard| RiskGuard started on XAUUSD
+RiskGuard| RiskGuard 1.11 started on XAUUSD
 ```
 
-Open a tiny demo position **without** SL/TP — within a second RiskGuard should assign SL/TP (and alert if configured).
+If the box says **CANNOT TRADE**, you are not protected. Typical causes:
+
+- toolbar Algo Trading is off
+- Allow Algo Trading was not ticked on the EA
+- the account or this symbol cannot be traded
+- terminal not connected
+
+Open a tiny demo position **with no stop**. On the **next tick** a stop and a target should appear.
+
+Optional: Navigator → **Scripts → RiskGuard_SelfTest** on XAUUSD **during liquid hours**. Experts tab: all PASS. If quotes are dead, live money tests are skipped — run it when gold is trading.
 
 ## 6. Permissions checklist
 
-- [ ] Algo Trading enabled (toolbar)
-- [ ] EA “Allow Algo Trading” checked
-- [ ] Autotrading not blocked by broker / account type
-- [ ] Hedging account if you need multi-leg averaging
-- [ ] Demo first — always
+- [ ] Toolbar Algo Trading green
+- [ ] EA “Allow Algo Trading” ticked
+- [ ] Broker/account allows EAs
+- [ ] Hedging account if you need several add-on trades on one symbol
+- [ ] Demo first
 
 ## 7. Updating
 
-Replace `.mq5` / `.mqh` files with newer versions from git, recompile, remove EA from chart, re-attach (or right-click chart → Expert list → refresh properties).
+Replace the `.mq5` / `.mqh` files, recompile, remove the EA from the chart, attach again.
+
+**Do not reorder or delete Inputs** in the source. Two unused settings are left in place on purpose so your saved values do not shift onto the wrong line (that would silently change your max lot).
+
+Day lock and today’s trade count survive a reload (stored in the terminal for this account).

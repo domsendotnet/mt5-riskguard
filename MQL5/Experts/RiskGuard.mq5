@@ -4,12 +4,30 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.01"
+#property version   "1.11"
 #property strict
-#property description "RiskGuard — auto SL/TP, lot/risk caps, conditional averaging,"
-#property description "basket BE+ exit, time guards, and day lock for MT5 scalpers."
+#property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
+#property description "tiny-profit basket exit, dead-trade timer, and a day kill-switch."
 
 #include <RiskGuard/RiskGuard_Panel.mqh>
+
+//+------------------------------------------------------------------+
+void RG_SelectWhitelistSymbols()
+  {
+   string list = InpSymbolsWhitelist;
+   StringReplace(list, " ", "");
+   if(StringLen(list) == 0)
+      return;
+   string parts[];
+   int n = StringSplit(list, ',', parts);
+   for(int i = 0; i < n; i++)
+     {
+      if(StringLen(parts[i]) == 0)
+         continue;
+      if(!SymbolSelect(parts[i], true))
+         Print("RiskGuard| WARNING: could not select symbol ", parts[i]);
+     }
+  }
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -20,8 +38,15 @@ int OnInit()
    g_dayClosedTrades = 0;
    g_dayLocked = false;
    g_cooldownUntil = 0;
+   g_cooldownStarted = 0;
+   g_lockTime = 0;
+   g_seenDealN = 0;
+   g_seenDealNext = 0;
    g_lastAction = "initialized";
-   g_lastStatusReason = "armed";
+   g_lastStatusReason = "starting";
+   g_lastNotifyMsg = "";
+   g_lastNotifyTime = 0;
+   ArrayInitialize(g_seenDeals, 0);
    RG_StateLoad();
 
    if(InpTimerSeconds < 1)
@@ -34,8 +59,6 @@ int OnInit()
       Print("RiskGuard| MaxLot and MaxLossPer001 must be > 0");
       return INIT_PARAMETERS_INCORRECT;
      }
-   if(InpSL_MoneyPer001 > InpMaxLossPer001)
-      Print("RiskGuard| WARNING: SL money per 0.01 > MaxLossPer001 — widen guard uses MaxLossPer001");
    if(InpAveragingMaxAdds < 0)
      {
       Print("RiskGuard| AveragingMaxAdds must be >= 0");
@@ -46,8 +69,33 @@ int OnInit()
       Print("RiskGuard| HardMaxOpenPositions must be >= 1");
       return INIT_PARAMETERS_INCORRECT;
      }
+   if(InpMaxOpenPositions < 1)
+     {
+      Print("RiskGuard| MaxOpenPositions must be >= 1");
+      return INIT_PARAMETERS_INCORRECT;
+     }
 
+   double vmin = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   if(vmin > 0.0 && InpMaxLot + 1e-12 < vmin)
+     {
+      Print("RiskGuard| MaxLot ", InpMaxLot, " < broker min volume ", vmin,
+            " — every fill would be closed");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+
+   if(InpSLMode == RG_SL_MONEY_PER_001 && InpSL_MoneyPer001 > InpMaxLossPer001)
+      Print("RiskGuard| WARNING: SL money per 0.01 > MaxLossPer001 — hard max wins, SL will be snapped");
+
+   if(InpTimeGuardEnabled && InpMustBeGreenSeconds > 0 && InpMaxHoldSeconds > 0 &&
+      InpMustBeGreenSeconds > InpMaxHoldSeconds)
+      Print("RiskGuard| WARNING: must-be-green seconds > max hold — max hold will fire first");
+
+   RG_SelectWhitelistSymbols();
    RG_ConfigureTrade();
+   RG_RefreshTradingStatus();
+   if(!g_tradingOk)
+      Print("RiskGuard| WARNING: cannot trade yet — ", g_tradingBlockReason,
+            " (panel will show CANNOT TRADE until this is fixed)");
 
    if(!EventSetTimer(InpTimerSeconds))
      {
@@ -55,11 +103,10 @@ int OnInit()
       return INIT_FAILED;
      }
 
-   RG_UpdateDayState();
-   RG_EnforceAll();
+   RG_GuardianSweep();
    RG_PanelUpdate();
 
-   RG_Log(1, "RiskGuard started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.11 started on " + _Symbol);
    return INIT_SUCCEEDED;
   }
 
@@ -73,42 +120,14 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   // lightweight: basket exit is latency-sensitive for scalpers
-   if(!InpEnableGuard)
-     {
-      RG_PanelUpdate();
-      return;
-     }
-   if(InpChartSymbolOnly)
-      RG_EnforceBasketExit(_Symbol);
-   else
-     {
-      // still cheap: scan symbols with managed positions
-      string symbols[];
-      int ns = 0;
-      for(int i = PositionsTotal() - 1; i >= 0; i--)
-        {
-         if(!RG_SelectManagedByIndex(i))
-            continue;
-         string s = g_pos.Symbol();
-         bool found = false;
-         for(int k = 0; k < ns; k++)
-            if(symbols[k] == s) { found = true; break; }
-         if(!found)
-           {
-            ArrayResize(symbols, ns + 1);
-            symbols[ns++] = s;
-           }
-        }
-      for(int s = 0; s < ns; s++)
-         RG_EnforceBasketExit(symbols[s]);
-     }
+   RG_GuardianSweep();
+   RG_PanelUpdate();
   }
 
 //+------------------------------------------------------------------+
 void OnTimer()
   {
-   RG_EnforceAll();
+   RG_GuardianSweep();
    RG_PanelUpdate();
   }
 
@@ -117,97 +136,11 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
                         const MqlTradeResult &result)
   {
-   if(!InpEnableGuard)
-      return;
+   if(trans.type == TRADE_TRANSACTION_DEAL_ADD && trans.deal > 0)
+      RG_ProcessClosedDeal(trans.deal);
 
-   // New position deal
-   if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
-     {
-      ulong deal = trans.deal;
-      if(deal == 0)
-         return;
-      if(!HistoryDealSelect(deal))
-         return;
-
-      long entry = HistoryDealGetInteger(deal, DEAL_ENTRY);
-      long deal_type = HistoryDealGetInteger(deal, DEAL_TYPE);
-      if(deal_type != DEAL_TYPE_BUY && deal_type != DEAL_TYPE_SELL)
-         return;
-
-      string symbol = HistoryDealGetString(deal, DEAL_SYMBOL);
-      long magic = HistoryDealGetInteger(deal, DEAL_MAGIC);
-      if(!RG_SymbolAllowed(symbol))
-         return;
-      if(!RG_MagicAllowed(magic))
-         return;
-
-      if(entry == DEAL_ENTRY_IN || entry == DEAL_ENTRY_INOUT)
-        {
-         ulong pos_id = (ulong)HistoryDealGetInteger(deal, DEAL_POSITION_ID);
-         ulong pos_ticket = 0;
-
-         if(pos_id > 0)
-           {
-            for(int i = PositionsTotal() - 1; i >= 0; i--)
-              {
-               if(!g_pos.SelectByIndex(i))
-                  continue;
-               if((ulong)g_pos.Identifier() == pos_id || g_pos.Ticket() == pos_id)
-                 {
-                  pos_ticket = g_pos.Ticket();
-                  break;
-                 }
-              }
-           }
-
-         if(pos_ticket == 0)
-           {
-            datetime newest = 0;
-            for(int i = PositionsTotal() - 1; i >= 0; i--)
-              {
-               if(!g_pos.SelectByIndex(i))
-                  continue;
-               if(g_pos.Symbol() != symbol || g_pos.Magic() != magic)
-                  continue;
-               datetime t = (datetime)PositionGetInteger(POSITION_TIME);
-               if(t >= newest)
-                 {
-                  newest = t;
-                  pos_ticket = g_pos.Ticket();
-                 }
-              }
-           }
-
-         if(pos_ticket > 0 && RG_PositionManaged(pos_ticket))
-            RG_EnforceNewPosition(pos_ticket);
-        }
-
-      if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY || entry == DEAL_ENTRY_INOUT)
-        {
-         ulong pos_id = (ulong)HistoryDealGetInteger(deal, DEAL_POSITION_ID);
-         // Ignore partial closes — only full position exits affect day count / cooldown
-         if(entry == DEAL_ENTRY_INOUT || !RG_PositionStillOpen(pos_id))
-           {
-            double profit = HistoryDealGetDouble(deal, DEAL_PROFIT)
-                            + HistoryDealGetDouble(deal, DEAL_SWAP)
-                            + HistoryDealGetDouble(deal, DEAL_COMMISSION);
-            RG_OnDealClosedLoss(profit);
-            RG_UpdateDayState();
-           }
-        }
-     }
-
-   // SL/TP changed externally — re-enforce widen/remove rules
-   if(trans.type == TRADE_TRANSACTION_POSITION)
-     {
-      ulong ticket = trans.position;
-      if(ticket > 0 && RG_PositionManaged(ticket))
-        {
-         RG_ApplyAutoSLTP(ticket);
-         RG_EnforceSize(ticket);
-        }
-     }
-
+   if(InpEnableGuard)
+      RG_GuardianSweep();
    RG_PanelUpdate();
   }
 
