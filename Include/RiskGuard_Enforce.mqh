@@ -1120,6 +1120,72 @@ void RG_EnforceBasketExit(const string symbol)
   }
 
 //+------------------------------------------------------------------+
+void RG_UpdateBasketRescueState(const string symbol)
+  {
+   int n = RG_CountManaged(symbol);
+   if(n <= 0)
+      return;
+   if(n >= 2)
+      RG_RescueWatch(symbol);
+   if(n < 2)
+      return;
+   double net = RG_BasketNetProfit(symbol);
+   double worst = RG_RescueWorstLoad(symbol);
+   if(net < worst)
+      RG_RescueWorstSave(symbol, net);
+  }
+
+//+------------------------------------------------------------------+
+// Deep averaging hole that has given most of it back: flatten while still
+// red (or scratch). Does not wait for the tiny combined-green target.
+// Single-trade BE lock and this never overlap (1 vs 3+). Tiny-green exit
+// still owns a basket that never dug a real hole.
+//+------------------------------------------------------------------+
+void RG_EnforceBasketRescue(const string symbol)
+  {
+   if(!RG_PolicyBasketRescueOn())
+      return;
+   if(!RG_PolicyAveragingOn())
+      return;
+   int n = RG_CountManaged(symbol);
+   if(n < InpBasketRescueMinTrades)
+      return;
+   int age = RG_BasketOldestAgeSec(symbol);
+   if(age < InpBasketRescueMinAgeSec)
+      return;
+   double worst = RG_RescueWorstLoad(symbol);
+   if(worst > -InpBasketRescueMinHole + 1e-8)
+      return;
+   double net = RG_BasketNetProfit(symbol);
+   double level = RG_RescueCloseNet(worst, InpBasketRescueGivebackN);
+   if(net + 1e-8 < level)
+      return;
+   RG_Notify(StringFormat("basket rescued %s — worst %.2f now %.2f (1/%d of the hole)",
+                          symbol, worst, net, InpBasketRescueGivebackN));
+   RG_FlattenSymbol(symbol, StringFormat("rescued averaging hole (%.2f → %.2f, 1/%d)",
+                                         worst, net, InpBasketRescueGivebackN));
+   if(RG_CountManaged(symbol) == 0)
+      RG_RescueWorstClear(symbol);
+  }
+
+//+------------------------------------------------------------------+
+string RG_RescuePanelLine(const string symbol)
+  {
+   if(!RG_PolicyBasketRescueOn())
+      return "";
+   int n = RG_CountManaged(symbol);
+   if(n < 2)
+      return "";
+   double worst = RG_RescueWorstLoad(symbol);
+   double net = RG_BasketNetProfit(symbol);
+   double level = RG_RescueCloseNet(worst, InpBasketRescueGivebackN);
+   int age = RG_BasketOldestAgeSec(symbol);
+   return StringFormat("Rescue worst %+.2f now %+.2f  close at ≥ %+.2f  (%ds / %d trades, age %ds)",
+                       worst, net, level, InpBasketRescueMinAgeSec,
+                       InpBasketRescueMinTrades, age);
+  }
+
+//+------------------------------------------------------------------+
 void RG_EnforceTimeGuard()
   {
    if(!RG_PolicyTimeOn())
@@ -1475,10 +1541,15 @@ void RG_GuardianSweep()
    RG_EnforceTimeGuard();
    RG_EnforceTotalRisk();
 
+   RG_RescueReapFlat();
    string symbols[];
    RG_CollectManagedSymbols(symbols);
    for(int s = 0; s < ArraySize(symbols); s++)
+     {
+      RG_UpdateBasketRescueState(symbols[s]);
+      RG_EnforceBasketRescue(symbols[s]);
       RG_EnforceBasketExit(symbols[s]);
+     }
 
    RG_RefreshStatusReason();
   }

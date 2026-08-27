@@ -32,6 +32,10 @@ string   g_lastNotifyMsg      = "";
 datetime g_lastNotifyTime     = 0;
 bool     g_noTradeWasActive   = false;
 
+#define RG_RESCUE_MAX 32
+string   g_rescueSym[RG_RESCUE_MAX];
+int      g_rescueN            = 0;
+
 #define RG_SEEN_DEALS 256
 ulong    g_seenDeals[RG_SEEN_DEALS];
 int      g_seenDealN          = 0;
@@ -92,6 +96,90 @@ void RG_StateLoad()
      }
    if(!g_dayLocked)
       g_lockTime = 0;
+  }
+
+//+------------------------------------------------------------------+
+string RG_GvSafeSuffix(const string raw)
+  {
+   string s = raw;
+   int n = StringLen(s);
+   for(int i = 0; i < n; i++)
+     {
+      ushort c = StringGetCharacter(s, i);
+      bool ok = ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                 (c >= '0' && c <= '9'));
+      if(!ok)
+         StringSetCharacter(s, i, '_');
+     }
+   return s;
+  }
+
+//+------------------------------------------------------------------+
+string RG_RescueWorstKey(const string symbol)
+  {
+   return RG_StateKey("rsW_" + RG_GvSafeSuffix(symbol));
+  }
+
+//+------------------------------------------------------------------+
+void RG_RescueWorstClear(const string symbol)
+  {
+   string k = RG_RescueWorstKey(symbol);
+   if(GlobalVariableCheck(k))
+      GlobalVariableDel(k);
+  }
+
+//+------------------------------------------------------------------+
+double RG_RescueWorstLoad(const string symbol)
+  {
+   string k = RG_RescueWorstKey(symbol);
+   if(!GlobalVariableCheck(k))
+      return 0.0;
+   return GlobalVariableGet(k);
+  }
+
+//+------------------------------------------------------------------+
+void RG_RescueWorstSave(const string symbol, const double worst)
+  {
+   GlobalVariableSet(RG_RescueWorstKey(symbol), worst);
+  }
+
+//+------------------------------------------------------------------+
+void RG_RescueWatch(const string symbol)
+  {
+   if(StringLen(symbol) == 0)
+      return;
+   for(int i = 0; i < g_rescueN; i++)
+      if(g_rescueSym[i] == symbol)
+         return;
+   if(g_rescueN >= RG_RESCUE_MAX)
+      return;
+   g_rescueSym[g_rescueN++] = symbol;
+  }
+
+//+------------------------------------------------------------------+
+void RG_RescueDeleteAllForAccount()
+  {
+   string prefix = RG_StateKey("rsW_");
+   for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
+     {
+      string name = GlobalVariableName(i);
+      if(StringFind(name, prefix) == 0)
+         GlobalVariableDel(name);
+     }
+   g_rescueN = 0;
+  }
+
+//+------------------------------------------------------------------+
+void RG_RescueReapFlat()
+  {
+   for(int i = g_rescueN - 1; i >= 0; i--)
+     {
+      if(RG_CountManaged(g_rescueSym[i]) > 0)
+         continue;
+      RG_RescueWorstClear(g_rescueSym[i]);
+      g_rescueSym[i] = g_rescueSym[g_rescueN - 1];
+      g_rescueN--;
+     }
   }
 
 //+------------------------------------------------------------------+
@@ -708,6 +796,39 @@ double RG_BasketLots(const string symbol)
 double RG_BasketExitTarget(const string symbol)
   {
    return RG_ExitTargetForLots(RG_BasketLots(symbol));
+  }
+
+//+------------------------------------------------------------------+
+int RG_BasketOldestAgeSec(const string symbol)
+  {
+   datetime oldest = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(!RG_SelectManagedByIndex(i))
+         continue;
+      if(g_pos.Symbol() != symbol)
+         continue;
+      datetime t = g_pos.Time();
+      if(oldest == 0 || t < oldest)
+         oldest = t;
+     }
+   if(oldest == 0)
+      return 0;
+   int age = (int)(TimeTradeServer() - oldest);
+   if(age < 0)
+      age = 0;
+   return age;
+  }
+
+//+------------------------------------------------------------------+
+// Remaining hole (0 if green) vs worst hole. Close when remaining <= worst/N.
+// worst_net is negative (e.g. -30). Returns the net level to close at (e.g. -5).
+//+------------------------------------------------------------------+
+double RG_RescueCloseNet(const double worst_net, const int giveback_n)
+  {
+   if(worst_net >= 0.0 || giveback_n < 2)
+      return 0.0;
+   return worst_net / (double)giveback_n;
   }
 
 //+------------------------------------------------------------------+

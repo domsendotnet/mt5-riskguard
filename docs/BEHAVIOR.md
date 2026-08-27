@@ -1,10 +1,10 @@
-# Behavior specification (RiskGuard 1.30)
+# Behavior specification (RiskGuard 1.31)
 
 This is the **engineer’s spec** — exact runtime rules. If you are using the EA, start with [USER_GUIDE.md](USER_GUIDE.md) and [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). Those use the same words as the Inputs dialog.
 
 This document is the source of truth for what RiskGuard does at runtime.
 
-**Current build: 1.30** (`#property version` in `RiskGuard.mq5`). The guardian loop is still the 1.10 tick/timer sweep. On top of that:
+**Current build: 1.31** (`#property version` in `RiskGuard.mq5`). The guardian loop is still the 1.10 tick/timer sweep. On top of that:
 
 - **1.20** — policy Inputs; mechanics always on; extras `0` = never add; day lock on if a limit is `> 0`
 - **1.21** — stop ceiling is a goal, not a reason to close if the broker will not take that stop this tick
@@ -17,6 +17,7 @@ This document is the source of truth for what RiskGuard does at runtime.
 - **1.28** — no-trade hours on by default (`13:45-15:15,16:00-16:05`); no trading from `OnInit`; unreadable hours fail-closed
 - **1.29** — averaging widens every leg’s stop by `InpAveragingStopFactor` (default 2×) so the first scalp is not stopped at the single-trade 5
 - **1.30** — optional single-trade break-even lock after a % of take-profit (off by default)
+- **1.31** — optional basket rescue: old 3+ average, hole shrunk to 1/N of worst, flatten while still red
 
 ## Event model
 
@@ -90,7 +91,7 @@ Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fail
 9. Naked SL timeout close (still no stop after 3 seconds).
 10. Time guard (single-leg only; skipped while 2+ trades are open).
 11. Total open risk — close **largest money-risk first**.
-12. Combined tiny-profit exit (2+ legs).
+12. Combined tiny-profit exit (2+ legs) and basket rescue (if armed).
 
 ## Stop loss rules
 
@@ -174,6 +175,23 @@ if net ≥ target → close all managed legs on symbol
 ```
 
 Commission is **not** double-counted in `net`; it is modeled in `target` via the configured commission input.
+
+## Basket rescue (optional, 2+ trades)
+
+Off unless `InpBasketRescueMinAgeSec > 0`. Does **not** replace tiny-green exit or single-trade BE.
+
+While averaging is on, for each symbol:
+
+1. While 2+ managed legs are open, remember the **worst** combined `profit+swap` (persisted per login+symbol). Forget it when the symbol is flat. Orphans are purged if the EA starts with no managed positions.
+2. Fire only if **all** of:
+   - extras > 0
+   - open managed count ≥ `InpBasketRescueMinTrades` (must be ≥ 2)
+   - age of the **oldest** leg ≥ `InpBasketRescueMinAgeSec`
+   - worst net ≤ −`InpBasketRescueMinHole`
+   - `giveback N` ≥ 2 (1 is rejected at init — that would close at the bottom of the hole)
+   - current net ≥ `worst / N` (e.g. worst −30, N=6 → close at ≥ −5, including scratch/green)
+
+Then flatten the symbol (retry until gone). Time guard still skips 2+ legs; this is the basket’s early-out. Single-trade BE never runs at the same time (count ≠ 1).
 
 ## Time guard (single-leg)
 
@@ -262,7 +280,7 @@ No persistence: when the clock leaves the slot, trading is allowed again.
 
 ## Versioning
 
-EA `#property version` is **1.30**. Any behaviour or layout change must update **all** of these in the same change, and set their version headers to the same number:
+EA `#property version` is **1.31**. Any behaviour or layout change must update **all** of these in the same change, and set their version headers to the same number:
 
 - `RiskGuard.mq5` `#property version` and the Experts start log line
 - `Scripts/RiskGuard_SelfTest.mq5` version + banner

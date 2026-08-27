@@ -1,12 +1,12 @@
-# Settings reference (RiskGuard 1.30)
+# Settings reference (RiskGuard 1.31)
 
 These names are **exactly** what you see in MetaTrader:
 
 **Right-click the chart → Expert list → Properties → Inputs.**
 
-There are **31** settings in **6 groups**. Everything else is built in (stop always on, pendings always watched, extras always same-direction, and so on). You still choose the **policy**. RiskGuard chooses the **mechanics**.
+There are **35** settings in **6 groups**. Everything else is built in (stop always on, pendings always watched, extras always same-direction, and so on). You still choose the **policy**. RiskGuard chooses the **mechanics**.
 
-**1.29** appends the averaging stop-widen. **1.30** appends break-even lock. Old saved values stay on the same lines.
+**1.29–1.31** append averaging stop-widen, break-even lock, and basket rescue at the **bottom**. Old saved values stay on the same lines.
 
 **Upgrading from 1.26:** group 6 was **appended**. Old saved values stay on the same lines.
 
@@ -41,6 +41,7 @@ Defaults assume a roughly **2,000** account and **1-minute gold**.
 | Your broker commission per 0.01 lot | `0.04` | **Put your real cost here.** |
 | When 2+ trades: stop this many times as wide | `2` | Averaging room. `1` = don’t widen. |
 | Move stop to break-even after this % of take-profit | `0` | Off. Set `70` if you want it. |
+| Rescue: oldest trade at least this many seconds | `0` | Off. Set `600` to turn basket rescue on. |
 | Clock for the hours below | Europe/Berlin | Type hours in Berlin time. DST is automatic. Server is converted. |
 | Close EVERYTHING in these hours | `13:45-15:15,16:00-16:05` | Empty = off. |
 
@@ -100,6 +101,10 @@ Otherwise the extra is closed (a pending extra is deleted). Buy+sell mix is alwa
 | Close all together at this tiny profit (your money, before commission) | `0.01` | Combined “just green”. |
 | Your broker commission per 0.01 lot | `0.04` | Folded into the combined target so a fake BE does not print a loss. |
 | When 2+ trades: stop this many times as wide | `2` | **At the bottom of Inputs** (appended so old values don’t shift). `2` = twice the single-trade stop on every leg. `3` = three times. `1` = don’t widen. |
+| Rescue: oldest trade at least this many seconds | `0` | **0 = off.** Try `600` (10 minutes). Master switch for basket rescue. |
+| Rescue: at least this many open trades | `3` | Original + extras. Must be ≥ 2. If this is more than `1 + extras`, rescue never fires. |
+| Rescue: close when remaining hole is 1/N of the worst | `6` | −30 worst → close at −5. Must be ≥ 2 (`1` would close at the bottom). |
+| Rescue: only if the worst hole was at least this | `5.0` | Ignore noise. `0` = any negative worst. |
 
 With 2+ trades, a 5-per-0.01 stop becomes **10** at factor 2 (existing legs are pushed out, new legs start there). Take-profits still come off. They still exit together at the tiny combined target.
 
@@ -110,6 +115,8 @@ combined profit ≥ tiny profit + commission per 0.01 × (lots / 0.01)
 ```
 
 Example: two 0.01 lots, tiny profit 0.01, commission 0.04 → close at combined P/L ≥ **0.09**.
+
+If **rescue** is on: a 3-leg average whose oldest leg is old enough, and whose combined hole has shrunk to 1/N of the worst (e.g. −30 → −5), is closed **while still red**. That is not tiny-green and not single-trade break-even.
 
 ---
 

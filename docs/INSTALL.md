@@ -1,4 +1,4 @@
-# Install & compile (RiskGuard 1.30)
+# Install & compile (RiskGuard 1.31)
 
 Everything you need sits in **one folder**: the EA, `Include/`, `Scripts/`, and `docs/`. Do not split them into MT5’s global Include/Scripts trees.
 
@@ -41,7 +41,7 @@ If you see `cannot open include file`, `Include/` is not sitting next to `RiskGu
 
 1. Navigator → **Expert Advisors** → your folder → drag **RiskGuard** onto **XAUUSD M1**.
 2. **Common** tab: tick **Allow Algo Trading**.
-3. **Inputs** tab: six groups, 31 settings. Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)  
+3. **Inputs** tab: six groups, 35 settings. Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)  
    **Upgrading from 1.23 or earlier:** remove the EA from the chart, then attach it again (1.24 removed one Input; 1.20 rebuilt the list).
 4. OK. Toolbar **Algo Trading** must be **green**.
 
@@ -52,7 +52,7 @@ Chart box: `RISKGUARD · XAUUSD`. Status line should contain **protecting**.
 Experts log:
 
 ```text
-RiskGuard| RiskGuard 1.30 started on XAUUSD
+RiskGuard| RiskGuard 1.31 started on XAUUSD
 ```
 
 If the box says **CANNOT TRADE**, you are not protected. Typical causes:
@@ -78,7 +78,8 @@ Optional self-test: in MetaEditor open `Scripts/RiskGuard_SelfTest.mq5` (same fo
 
 Replace the **whole folder** (EA + `Include/` + `Scripts/` together), recompile, remove the EA from the chart, attach again.
 
-- **From 1.29:** 1.30 **appends** break-even % and lock. Old values stay. Recompile and reload. Experts log must say `RiskGuard 1.30 started`. Feature is **off** until you set the % (try `70`).
+- **From 1.30:** 1.31 **appends** basket rescue. Old values stay. Recompile and reload. Experts log must say `RiskGuard 1.31 started`. Rescue is **off** until oldest-trade seconds is `> 0` (try `600`).
+- **From 1.29:** 1.30 **appends** break-even % and lock. Old values stay. Feature is **off** until you set the % (try `70`).
 - **From 1.28:** 1.29 **appends** the averaging stop-widen factor. Old values stay. Recompile and reload.
 - **From 1.27:** 1.28 does not change Input order. Recompile and reload. Confirm the no-trade hours box is not empty if you saved 1.27 with it blank.
 - **From 1.26:** 1.27 **appended** group 6 (no-trade hours). Old values stay. Recompile and reload. Then set hours (1.28 default is `13:45-15:15,16:00-16:05` on a fresh attach).

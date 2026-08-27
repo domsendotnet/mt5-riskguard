@@ -4,7 +4,7 @@
 //|  during liquid hours. Read PASS/FAIL in the Experts tab.        |
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
-#property version   "1.30"
+#property version   "1.31"
 #property strict
 #property script_show_confirm
 #property description "RiskGuard self-test: money math, tick rounding, volume, basket target, no-trade hours."
@@ -32,7 +32,7 @@ void RG_Expect(const bool cond, const string name, const string detail)
 //+------------------------------------------------------------------+
 void OnStart()
   {
-   Print("========== RiskGuard self-test 1.30 ==========");
+   Print("========== RiskGuard self-test 1.31 ==========");
    Print("Symbol ", _Symbol, "  digits ", (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS),
          "  tick ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE), 8),
          "  tick_value ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE), 8));
@@ -58,6 +58,15 @@ void OnStart()
    RG_Expect(!RG_PolicyBreakEvenOn() || InpBE_TriggerPercent > 0.0,
              "BE off unless % > 0",
              DoubleToString(InpBE_TriggerPercent, 2));
+   RG_Expect(MathAbs(RG_RescueCloseNet(-30.0, 6) + 5.0) < 1e-9,
+             "rescue -30 hole / 6 = -5",
+             DoubleToString(RG_RescueCloseNet(-30.0, 6), 4));
+   RG_Expect(RG_RescueCloseNet(-30.0, 1) == 0.0,
+             "rescue N=1 refused (would close at the bottom)",
+             DoubleToString(RG_RescueCloseNet(-30.0, 1), 4));
+   RG_Expect(RG_RescueCloseNet(0.0, 6) == 0.0,
+             "rescue no hole → no level",
+             DoubleToString(RG_RescueCloseNet(0.0, 6), 4));
 
    RG_Expect(MathAbs(RG_CommissionForLots(0.01) - InpCommissionPer001) < 1e-9,
              "commission 0.01", DoubleToString(RG_CommissionForLots(0.01), 4));

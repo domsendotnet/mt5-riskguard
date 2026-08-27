@@ -1,4 +1,4 @@
-# User guide (RiskGuard 1.30)
+# User guide (RiskGuard 1.31)
 
 You click. RiskGuard watches. If the account is in a state your emotions would like and your math cannot afford, it **fixes it or kills it**. It keeps trying until the account is legal.
 
@@ -11,9 +11,9 @@ It does **not** find entries. It is not a strategy. It is a guardian.
 1. Install and compile ([INSTALL.md](INSTALL.md)).
 2. Attach **RiskGuard** to XAUUSD, **M1**.
 3. Common tab: tick **Allow Algo Trading**.
-4. Inputs: six groups, 31 settings. Leave defaults unless you know better. Put **your** commission in group **3**. Group **6** is no-trade hours (Berlin clock, default `13:45-15:15,16:00-16:05`). Averaging stop-widen and optional break-even are at the **bottom**. After **1.24** re-attach (one Input removed). After **1.25** set both account-% boxes to **0** if they still say 1 / 2, or they will shrink the lot you typed. **1.27+** new Inputs are appended — old values stay put. From 1.22: copy this whole folder into `MQL5/Experts/` — do not split Include/Scripts.
+4. Inputs: six groups, 35 settings. Leave defaults unless you know better. Put **your** commission in group **3**. Group **6** is no-trade hours. Averaging stop-widen, break-even, and basket rescue are at the **bottom**. After **1.24** re-attach (one Input removed). After **1.25** set both account-% boxes to **0** if they still say 1 / 2. **1.27+** new Inputs are appended — old values stay put. From 1.22: copy this whole folder into `MQL5/Experts/` — do not split Include/Scripts.
 5. Toolbar **Algo Trading** = green.
-6. The chart box must say **protecting** (or **NO TRADE HOURS** if you are inside a slot), not **CANNOT TRADE**. Experts log must say `RiskGuard 1.30 started` and print Berlin vs server for your slots.
+6. The chart box must say **protecting** (or **NO TRADE HOURS** if you are inside a slot), not **CANNOT TRADE**. Experts log must say `RiskGuard 1.31 started` and print Berlin vs server for your slots.
 7. On demo, open a tiny trade **with no stop**. A stop and a target should appear on the **next tick**.
 8. Optional: in MetaEditor open `Scripts/RiskGuard_SelfTest.mq5` (same folder as the EA) and run it during market hours. Experts tab should say all PASS.
 
@@ -75,6 +75,7 @@ If it is allowed:
 - stops on **every** open leg go wider (default **2×** the single-trade stop) so the first one is not stopped out at 5
 - take-profits come off; they exit together
 - as soon as **all of them together** are a tiny bit green **after commission**, everything is closed
+- optional **rescue**: if the oldest leg is old enough (try 600s), you have enough extras (try 3), and the combined hole has shrunk to 1/6 of the worst (e.g. −30 → −5), everything is closed **without** waiting for tiny green
 
 If it is not allowed (lot too big, add-on % if you set one, day locked, revenge pause, netting account, too many already):
 
@@ -91,6 +92,7 @@ If it is not allowed (lot too big, add-on % if you set one, day locked, revenge 
 | Delete the stop | Puts it back. Still missing after 3 seconds → closes |
 | Drag the stop farther (more loss) | Pulls it back toward the worst-loss ceiling. If the broker cannot take that stop *yet* **and you are not already through that money**, it keeps the tightest legal stop and retries — it does not close for that |
 | A single trade reaches ~70% of target (if you set that %) | Stop moves to break-even + lock. A 2-trade average is not touched |
+| A 3-trade average was −30, now −5, oldest ≥ 10 min (if you turned rescue on) | All three are closed. Does not wait for tiny green |
 | Price already through your stop (gap / no SL yet) | Market-closes. It will not plant a stop further away than the loss you already have |
 | Open 0.09 when max lot is 0.08 | Shrinks to 0.08 this tick (does not wait for a stop). If shrinking fails, closes |
 | Place a 0.10 pending | Deletes the pending |
@@ -106,7 +108,7 @@ MetaTrader **cannot** block a market click before fill. Fastest legal reaction i
 
 ## Settings you should actually open
 
-31 settings, 6 groups. Full dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). The labels match the Inputs tab.
+35 settings, 6 groups. Full dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). The labels match the Inputs tab.
 
 Most people only set:
 
@@ -120,6 +122,7 @@ Most people only set:
 8. No-trade hours (Berlin clock + slots like `13:45-15:15,16:00-16:05`)
 9. Averaging stop-widen (`2` = twice as wide when 2+ trades)
 10. Optional break-even: set the % of take-profit (try `70`; `0` = off)
+11. Optional basket rescue: set oldest-leg seconds to `600` to turn it on (3 trades, 1/6 of the worst hole)
 
 Stops, pending-order kills, “same direction only”, shrink-or-close, and day-lock flatten are **always on**. That is the guardian, not a menu.
 
@@ -137,6 +140,7 @@ Stops, pending-order kills, “same direction only”, shrink-or-close, and day-
 - [ ] Algo Trading off → **CANNOT TRADE**
 - [ ] Two tiny 0.01 fills when adding is YES → both stops move out (default 2×, so ~10 per 0.01), TPs come off, they close together slightly green after costs
 - [ ] (Optional) set break-even to 70, take a tiny winner past ~70% of target → stop jumps to BE + lock; a second add does **not** get BE (averaging stop instead)
+- [ ] (Optional) rescue: set oldest seconds to 600, three tiny extras, fake a deep combined red then recover to ~1/6 of that hole → all closed while still red
 - [ ] Fat first trade, then an add → add dies and stays dead
 - [ ] After a loss, a revenge fill during the pause is closed
 - [ ] Tiny day-loss % on demo → day locks and everything watched is closed
@@ -188,3 +192,6 @@ The % is **70** for seventy percent of the take-profit money, not `0.70`. `0` tu
 
 **I had a break-even lock and the 180s timer still closed me.**  
 After a pullback the locked profit can be below the 0.50 “leave winners” line. Max hold still applies. Raise that exempt, or the max-hold seconds, if you want a BE-locked scalp to wait for the take-profit.
+
+**Rescue vs tiny green vs break-even — which fires?**  
+One trade: break-even lock (if you set the %). Two or more: no BE; they wait for tiny combined green, **or** rescue if you armed it (old enough, enough legs, hole shrunk to 1/N). Rescue can close still-red. Tiny green only closes already-green. They do not fight.

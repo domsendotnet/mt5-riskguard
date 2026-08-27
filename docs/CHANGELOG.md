@@ -1,6 +1,16 @@
 # Changelog
 
-Current build: **1.30**. Every doc in `docs/` plus `README.md` is written for that version.
+Current build: **1.31**. Every doc in `docs/` plus `README.md` is written for that version.
+
+## 1.31 — 2026-08-27
+
+Basket rescue: a deep average that has given most of the hole back is flattened **before** tiny-green / break-even. Optional.
+
+- Four Inputs appended (old saved values do not shift). Master off = **oldest-trade seconds = 0**.
+- Default try-values when you turn it on: **600s**, **3** trades, close at **1/6** of the worst hole, only if the worst hole was at least **5**.
+- Example: worst combined P/L −30, now −5, oldest leg ≥ 10 minutes, 3+ trades → close all. Do not wait for the 0.09 combined target.
+- Tracks the worst floating basket P/L per symbol (persisted). `1/N = 1` is rejected (that would close at the bottom).
+- Does not overlap single-trade break-even (1 trade) or tiny-green (already in profit). Time guard still skips 2+ legs — this is the basket’s “good enough, get out” rule.
 
 ## 1.30 — 2026-08-27
 

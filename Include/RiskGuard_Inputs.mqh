@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                           RiskGuard_Inputs.mqh |
 //|  Policy only. Implementation details are built-in constants.   |
-//|  1.30: optional break-even lock on a single trade.             |
+//|  1.31: basket rescue — close a deep average near break-even.   |
 //+------------------------------------------------------------------+
 #ifndef RISKGUARD_INPUTS_MQH
 #define RISKGUARD_INPUTS_MQH
@@ -103,6 +103,15 @@ input double InpBE_TriggerPercent = 0.0;  // Optional: move stop to break-even a
 input double InpBE_LockPer001     = 0.10; // Then lock this much per 0.01 past break-even (plus commission)
 
 //====================================================================
+// Basket rescue (appended — older saved Inputs keep their values)
+//====================================================================
+input group "═══ 3. Adding to losers ═══"
+input int    InpBasketRescueMinAgeSec = 0;   // Rescue: oldest trade at least this many seconds (0 = off). Try 600
+input int    InpBasketRescueMinTrades = 3;   // Rescue: at least this many open trades
+input int    InpBasketRescueGivebackN = 6;   // Rescue: close when remaining hole is 1/N of the worst (6 = 1/6)
+input double InpBasketRescueMinHole   = 5.0; // Rescue: only if the worst hole was at least this (your money)
+
+//====================================================================
 // Built-in policy — always on. Not in the dialog.
 //====================================================================
 #define RG_TIMER_SECONDS            1
@@ -160,6 +169,14 @@ bool RG_PolicyNoTradeHoursOn()
 bool RG_PolicyBreakEvenOn()
   {
    return (InpBE_TriggerPercent > 0.0);
+  }
+
+//+------------------------------------------------------------------+
+bool RG_PolicyBasketRescueOn()
+  {
+   return (InpBasketRescueMinAgeSec > 0 &&
+           InpBasketRescueMinTrades >= 2 &&
+           InpBasketRescueGivebackN >= 2);
   }
 
 #endif // RISKGUARD_INPUTS_MQH

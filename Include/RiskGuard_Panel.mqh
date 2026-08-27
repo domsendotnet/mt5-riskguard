@@ -126,7 +126,9 @@ void RG_PanelUpdate()
       mode = "ONE TRADE";
 
    string hours_line = RG_PolicyNoTradeHoursOn() ? RG_NoTradeHoursPanelLine() : "";
-   int lines = 11 + ((StringLen(hours_line) > 0) ? 1 : 0);
+   string rescue_line = RG_RescuePanelLine(_Symbol);
+   int lines = 11 + ((StringLen(hours_line) > 0) ? 1 : 0) +
+               ((StringLen(rescue_line) > 0) ? 1 : 0);
    int line = 0;
    RG_PanelSetBackground(lines);
    RG_PanelSetLabel("h", line++, "RISKGUARD  ·  " + _Symbol, status_clr);
@@ -164,6 +166,11 @@ void RG_PanelUpdate()
                        RG_IsNoTradeHoursActive() ? RG_PANEL_DANGER_COLOR : RG_PANEL_TEXT_COLOR);
    else
       ObjectDelete(0, RG_PANEL_PREFIX + "h2");
+
+   if(StringLen(rescue_line) > 0)
+      RG_PanelSetLabel("rs", line++, rescue_line, RG_PANEL_WARN_COLOR);
+   else
+      ObjectDelete(0, RG_PANEL_PREFIX + "rs");
 
    RG_PanelSetLabel("m", line++, mode + "  ·  " + g_lastStatusReason, status_clr);
    RG_PanelSetLabel("l", line++, "Last action: " + g_lastAction, RG_PANEL_TEXT_COLOR);

@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.30"
+#property version   "1.31"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
 #property description "tiny-profit basket exit, dead-trade timer, day kill-switch, no-trade hours."
@@ -47,8 +47,11 @@ int OnInit()
    g_lastNotifyMsg = "";
    g_lastNotifyTime = 0;
    g_noTradeWasActive = false;
+   g_rescueN = 0;
    ArrayInitialize(g_seenDeals, 0);
    RG_StateLoad();
+   if(RG_CountManaged() == 0)
+      RG_RescueDeleteAllForAccount();
 
    if(InpMaxLot <= 0.0 || InpMaxLossPer001 <= 0.0)
      {
@@ -103,6 +106,36 @@ int OnInit()
       Print("RiskGuard| WARNING: break-even % is ", DoubleToString(InpBE_TriggerPercent, 1),
             " — 70 means seventy percent of take-profit, not 0.70");
 
+   if(InpBasketRescueMinAgeSec < 0)
+     {
+      Print("RiskGuard| Rescue oldest-trade seconds cannot be negative (0 = off)");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(InpBasketRescueMinAgeSec > 0)
+     {
+      if(InpBasketRescueMinTrades < 2)
+        {
+         Print("RiskGuard| Rescue min trades must be 2 or more (it is a basket rule)");
+         return INIT_PARAMETERS_INCORRECT;
+        }
+      if(InpBasketRescueGivebackN < 2)
+        {
+         Print("RiskGuard| Rescue 1/N must be 2 or more — 1 would close at the worst hole");
+         return INIT_PARAMETERS_INCORRECT;
+        }
+      if(InpBasketRescueMinHole < 0.0)
+        {
+         Print("RiskGuard| Rescue min hole cannot be negative");
+         return INIT_PARAMETERS_INCORRECT;
+        }
+      if(!RG_PolicyAveragingOn())
+         Print("RiskGuard| WARNING: basket rescue is on but extras is 0 — rescue never fires");
+      else if(InpBasketRescueMinTrades > RG_PolicyHardMaxPositions())
+         Print("RiskGuard| WARNING: rescue wants ", InpBasketRescueMinTrades,
+               " trades but you only allow ", RG_PolicyHardMaxPositions(),
+               " — rescue never fires");
+     }
+
    string hours_err;
    if(!RG_NoTradeHoursValidate(hours_err))
      {
@@ -136,7 +169,7 @@ int OnInit()
       return INIT_FAILED;
      }
 
-   RG_Log(1, "RiskGuard 1.30 started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.31 started on " + _Symbol);
    RG_LogNoTradeHoursMapping();
    if(RG_IsNoTradeHoursActive())
       Print("RiskGuard| WARNING: inside a no-trade slot right now — watched trades will be closed on the next tick");
