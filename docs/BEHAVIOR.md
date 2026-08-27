@@ -1,10 +1,10 @@
-# Behavior specification (RiskGuard 1.31)
+# Behavior specification (RiskGuard 1.32)
 
 This is the **engineer’s spec** — exact runtime rules. If you are using the EA, start with [USER_GUIDE.md](USER_GUIDE.md) and [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). Those use the same words as the Inputs dialog.
 
 This document is the source of truth for what RiskGuard does at runtime.
 
-**Current build: 1.31** (`#property version` in `RiskGuard.mq5`). The guardian loop is still the 1.10 tick/timer sweep. On top of that:
+**Current build: 1.32** (`#property version` in `RiskGuard.mq5`). The guardian loop is still the 1.10 tick/timer sweep. On top of that:
 
 - **1.20** — policy Inputs; mechanics always on; extras `0` = never add; day lock on if a limit is `> 0`
 - **1.21** — stop ceiling is a goal, not a reason to close if the broker will not take that stop this tick
@@ -18,6 +18,7 @@ This document is the source of truth for what RiskGuard does at runtime.
 - **1.29** — averaging widens every leg’s stop by `InpAveragingStopFactor` (default 2×) so the first scalp is not stopped at the single-trade 5
 - **1.30** — optional single-trade break-even lock after a % of take-profit (off by default)
 - **1.31** — optional basket rescue: old 3+ average, hole shrunk to 1/N of worst, flatten while still red
+- **1.32** — rescue hole is keyed to the oldest ticket so a new average does not inherit a stale worst
 
 ## Event model
 
@@ -182,7 +183,7 @@ Off unless `InpBasketRescueMinAgeSec > 0`. Does **not** replace tiny-green exit 
 
 While averaging is on, for each symbol:
 
-1. While 2+ managed legs are open, remember the **worst** combined `profit+swap` (persisted per login+symbol). Forget it when the symbol is flat. Orphans are purged if the EA starts with no managed positions.
+1. While 2+ managed legs are open, remember the **worst** combined `profit+swap` (persisted per login+symbol), keyed to the **oldest ticket**. If that first-leg ticket changes, the hole starts over. Forget it when the symbol is flat. Orphans are purged if the EA starts with no managed positions.
 2. Fire only if **all** of:
    - extras > 0
    - open managed count ≥ `InpBasketRescueMinTrades` (must be ≥ 2)
@@ -280,7 +281,7 @@ No persistence: when the clock leaves the slot, trading is allowed again.
 
 ## Versioning
 
-EA `#property version` is **1.31**. Any behaviour or layout change must update **all** of these in the same change, and set their version headers to the same number:
+EA `#property version` is **1.32**. Any behaviour or layout change must update **all** of these in the same change, and set their version headers to the same number:
 
 - `RiskGuard.mq5` `#property version` and the Experts start log line
 - `Scripts/RiskGuard_SelfTest.mq5` version + banner

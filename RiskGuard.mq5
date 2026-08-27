@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.31"
+#property version   "1.32"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
 #property description "tiny-profit basket exit, dead-trade timer, day kill-switch, no-trade hours."
@@ -169,7 +169,7 @@ int OnInit()
       return INIT_FAILED;
      }
 
-   RG_Log(1, "RiskGuard 1.31 started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.32 started on " + _Symbol);
    RG_LogNoTradeHoursMapping();
    if(RG_IsNoTradeHoursActive())
       Print("RiskGuard| WARNING: inside a no-trade slot right now — watched trades will be closed on the next tick");

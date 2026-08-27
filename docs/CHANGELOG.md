@@ -1,6 +1,10 @@
 # Changelog
 
-Current build: **1.31**. Every doc in `docs/` plus `README.md` is written for that version.
+Current build: **1.32**. Every doc in `docs/` plus `README.md` is written for that version.
+
+## 1.32 — 2026-08-27
+
+Basket rescue keys the hole to the **oldest open ticket**. A leftover −30 from a finished average cannot flatten a new mild basket. No new Inputs.
 
 ## 1.31 — 2026-08-27
 

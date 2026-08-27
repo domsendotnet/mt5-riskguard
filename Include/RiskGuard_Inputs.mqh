@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                           RiskGuard_Inputs.mqh |
 //|  Policy only. Implementation details are built-in constants.   |
-//|  1.31: basket rescue — close a deep average near break-even.   |
+//|  1.32: basket rescue keyed to the oldest ticket (no stale hole).|
 //+------------------------------------------------------------------+
 #ifndef RISKGUARD_INPUTS_MQH
 #define RISKGUARD_INPUTS_MQH

@@ -1,4 +1,4 @@
-# Install & compile (RiskGuard 1.31)
+# Install & compile (RiskGuard 1.32)
 
 Everything you need sits in **one folder**: the EA, `Include/`, `Scripts/`, and `docs/`. Do not split them into MT5’s global Include/Scripts trees.
 
@@ -52,7 +52,7 @@ Chart box: `RISKGUARD · XAUUSD`. Status line should contain **protecting**.
 Experts log:
 
 ```text
-RiskGuard| RiskGuard 1.31 started on XAUUSD
+RiskGuard| RiskGuard 1.32 started on XAUUSD
 ```
 
 If the box says **CANNOT TRADE**, you are not protected. Typical causes:
@@ -78,7 +78,8 @@ Optional self-test: in MetaEditor open `Scripts/RiskGuard_SelfTest.mq5` (same fo
 
 Replace the **whole folder** (EA + `Include/` + `Scripts/` together), recompile, remove the EA from the chart, attach again.
 
-- **From 1.30:** 1.31 **appends** basket rescue. Old values stay. Recompile and reload. Experts log must say `RiskGuard 1.31 started`. Rescue is **off** until oldest-trade seconds is `> 0` (try `600`).
+- **From 1.31:** 1.32 does not change Inputs. Recompile and reload. Experts log must say `RiskGuard 1.32 started`.
+- **From 1.30:** 1.31 **appends** basket rescue. Old values stay. Rescue is **off** until oldest-trade seconds is `> 0` (try `600`).
 - **From 1.29:** 1.30 **appends** break-even % and lock. Old values stay. Feature is **off** until you set the % (try `70`).
 - **From 1.28:** 1.29 **appends** the averaging stop-widen factor. Old values stay. Recompile and reload.
 - **From 1.27:** 1.28 does not change Input order. Recompile and reload. Confirm the no-trade hours box is not empty if you saved 1.27 with it blank.

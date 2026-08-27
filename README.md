@@ -1,6 +1,6 @@
 # RiskGuard for MetaTrader 5
 
-**Version 1.31**
+**Version 1.32**
 
 You trade. RiskGuard enforces the rules.
 
@@ -87,7 +87,7 @@ Upgrading: from **1.11** re-attach (Inputs rebuilt in 1.20). From the **old spli
 | [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md) | Every Input, same wording as MT5 |
 | [docs/BEHAVIOR.md](docs/BEHAVIOR.md) | Exact runtime rules (the spec) |
 | [docs/INSTALL.md](docs/INSTALL.md) | Copy, compile, permissions, self-test |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.31 / 1.30 / 1.29 / … |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.32 / 1.31 / 1.30 / … |
 
 ---
 

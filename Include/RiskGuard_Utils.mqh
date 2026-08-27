@@ -121,9 +121,18 @@ string RG_RescueWorstKey(const string symbol)
   }
 
 //+------------------------------------------------------------------+
+string RG_RescueTicketKey(const string symbol)
+  {
+   return RG_StateKey("rsT_" + RG_GvSafeSuffix(symbol));
+  }
+
+//+------------------------------------------------------------------+
 void RG_RescueWorstClear(const string symbol)
   {
    string k = RG_RescueWorstKey(symbol);
+   if(GlobalVariableCheck(k))
+      GlobalVariableDel(k);
+   k = RG_RescueTicketKey(symbol);
    if(GlobalVariableCheck(k))
       GlobalVariableDel(k);
   }
@@ -159,11 +168,12 @@ void RG_RescueWatch(const string symbol)
 //+------------------------------------------------------------------+
 void RG_RescueDeleteAllForAccount()
   {
-   string prefix = RG_StateKey("rsW_");
+   string p1 = RG_StateKey("rsW_");
+   string p2 = RG_StateKey("rsT_");
    for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
      {
       string name = GlobalVariableName(i);
-      if(StringFind(name, prefix) == 0)
+      if(StringFind(name, p1) == 0 || StringFind(name, p2) == 0)
          GlobalVariableDel(name);
      }
    g_rescueN = 0;
@@ -796,6 +806,27 @@ double RG_BasketLots(const string symbol)
 double RG_BasketExitTarget(const string symbol)
   {
    return RG_ExitTargetForLots(RG_BasketLots(symbol));
+  }
+
+//+------------------------------------------------------------------+
+ulong RG_BasketOldestTicket(const string symbol)
+  {
+   datetime oldest = 0;
+   ulong ticket = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(!RG_SelectManagedByIndex(i))
+         continue;
+      if(g_pos.Symbol() != symbol)
+         continue;
+      datetime t = g_pos.Time();
+      if(ticket == 0 || t < oldest)
+        {
+         oldest = t;
+         ticket = g_pos.Ticket();
+        }
+     }
+   return ticket;
   }
 
 //+------------------------------------------------------------------+

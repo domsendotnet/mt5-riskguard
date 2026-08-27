@@ -1129,7 +1129,22 @@ void RG_UpdateBasketRescueState(const string symbol)
       RG_RescueWatch(symbol);
    if(n < 2)
       return;
+   ulong oldest_tk = RG_BasketOldestTicket(symbol);
+   if(oldest_tk == 0)
+      return;
    double net = RG_BasketNetProfit(symbol);
+   string tk_key = RG_RescueTicketKey(symbol);
+   ulong saved_tk = 0;
+   if(GlobalVariableCheck(tk_key))
+      saved_tk = (ulong)GlobalVariableGet(tk_key);
+   // New first-leg (or first time we see this basket) — start a new hole.
+   // Stale -30 from a finished average must not flatten a mild new one.
+   if(saved_tk != oldest_tk)
+     {
+      RG_RescueWorstSave(symbol, net);
+      GlobalVariableSet(tk_key, (double)oldest_tk);
+      return;
+     }
    double worst = RG_RescueWorstLoad(symbol);
    if(net < worst)
       RG_RescueWorstSave(symbol, net);

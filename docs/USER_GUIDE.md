@@ -1,4 +1,4 @@
-# User guide (RiskGuard 1.31)
+# User guide (RiskGuard 1.32)
 
 You click. RiskGuard watches. If the account is in a state your emotions would like and your math cannot afford, it **fixes it or kills it**. It keeps trying until the account is legal.
 
@@ -13,7 +13,7 @@ It does **not** find entries. It is not a strategy. It is a guardian.
 3. Common tab: tick **Allow Algo Trading**.
 4. Inputs: six groups, 35 settings. Leave defaults unless you know better. Put **your** commission in group **3**. Group **6** is no-trade hours. Averaging stop-widen, break-even, and basket rescue are at the **bottom**. After **1.24** re-attach (one Input removed). After **1.25** set both account-% boxes to **0** if they still say 1 / 2. **1.27+** new Inputs are appended — old values stay put. From 1.22: copy this whole folder into `MQL5/Experts/` — do not split Include/Scripts.
 5. Toolbar **Algo Trading** = green.
-6. The chart box must say **protecting** (or **NO TRADE HOURS** if you are inside a slot), not **CANNOT TRADE**. Experts log must say `RiskGuard 1.31 started` and print Berlin vs server for your slots.
+6. The chart box must say **protecting** (or **NO TRADE HOURS** if you are inside a slot), not **CANNOT TRADE**. Experts log must say `RiskGuard 1.32 started` and print Berlin vs server for your slots.
 7. On demo, open a tiny trade **with no stop**. A stop and a target should appear on the **next tick**.
 8. Optional: in MetaEditor open `Scripts/RiskGuard_SelfTest.mq5` (same folder as the EA) and run it during market hours. Experts tab should say all PASS.
 
