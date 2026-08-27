@@ -1,6 +1,6 @@
 # RiskGuard for MetaTrader 5
 
-**Version 1.20**
+**Version 1.22**
 
 You trade. RiskGuard enforces the rules.
 
@@ -39,12 +39,15 @@ Every rule is checked **every tick** (and again on a 1-second timer). A missed f
 
 ## Install
 
-1. Copy `MQL5/Experts/RiskGuard.mq5` into your data folder `MQL5/Experts/`.
-2. Copy `MQL5/Include/RiskGuard/` into `MQL5/Include/RiskGuard/`.
-3. Copy `MQL5/Scripts/RiskGuard_SelfTest.mq5` into `MQL5/Scripts/` (recommended).
-4. MetaEditor: open `RiskGuard.mq5` → **Compile** (F7). Zero errors.
-5. Attach **RiskGuard** to XAUUSD M1. Tick **Allow Algo Trading**. Toolbar Algo Trading = green.
-6. The chart box must say **protecting**, not **CANNOT TRADE**.
+Copy **this whole folder** (the one with `RiskGuard.mq5`, `Include/`, and `Scripts/`) into your data folder:
+
+```text
+File → Open Data Folder → MQL5/Experts/
+```
+
+Then in MetaEditor open `RiskGuard.mq5` → **Compile** (F7). Attach it to XAUUSD M1. Algo Trading green. Chart box must say **protecting**, not **CANNOT TRADE**.
+
+Do not split `Include/` or `Scripts/` into MT5’s global folders. They have to stay next to the `.mq5`.
 
 Step-by-step: [docs/INSTALL.md](docs/INSTALL.md)
 
@@ -79,17 +82,16 @@ Upgrading from 1.11: **remove the EA from the chart and attach it again** so Inp
 | [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md) | Every Input, same wording as MT5 |
 | [docs/BEHAVIOR.md](docs/BEHAVIOR.md) | Exact runtime rules (the spec) |
 | [docs/INSTALL.md](docs/INSTALL.md) | Copy, compile, permissions, self-test |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.20 / 1.11 / 1.10 / … |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.22 / 1.21 / 1.20 / … |
 
 ---
 
 ## Repository
 
 ```
-MQL5/
-  Experts/RiskGuard.mq5          # attach this
-  Include/RiskGuard/             # required includes
-  Scripts/RiskGuard_SelfTest.mq5 # run on XAUUSD during market hours
+RiskGuard.mq5                    # attach this
+Include/                         # required .mqh files (must stay next to the EA)
+Scripts/RiskGuard_SelfTest.mq5   # compile/run from this folder
 docs/
 LICENSE
 README.md

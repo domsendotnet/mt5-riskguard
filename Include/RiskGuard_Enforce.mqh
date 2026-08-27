@@ -330,10 +330,15 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
             double snap = (ptype == POSITION_TYPE_BUY) ? (open_price - max_sl_dist)
                                                        : (open_price + max_sl_dist);
             new_sl = RG_ClampToStops(symbol, ptype, open_price, snap, true);
-            changed = true;
-            sl_past_max = true;
-            RG_Notify(StringFormat("stop on #%s was too far — put back to max loss",
-                                   IntegerToString((long)ticket)));
+            // Only send a modify if this is actually closer to entry than the
+            // stop we have now. Broker min-distance can refuse a 5-per-0.01
+            // stop at entry; we keep the tightest legal stop and retry later.
+            double new_dist = MathAbs(open_price - new_sl);
+            if(new_dist + RG_TickSize(symbol) * 0.5 < cur_dist)
+              {
+               changed = true;
+               sl_past_max = true;
+              }
            }
         }
      }
@@ -361,20 +366,12 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
      {
       bool ok = RG_ModifySLTP(ticket, new_sl, new_tp, "auto SL/TP");
       if(!ok)
-         return true; // retry next tick; naked timeout is the kill
+         return true; // retry next tick; do not close a live trade over a rejected snap
       if(!g_pos.SelectByTicket(ticket))
          return false;
-     }
-
-   // After clamp, SL may still imply more than MaxLossPer001 — caller/size will close.
-   if(sl_past_max && g_pos.SelectByTicket(ticket) && g_pos.StopLoss() > 0.0 && max_sl_dist > 0.0)
-     {
-      double landed = MathAbs(g_pos.PriceOpen() - g_pos.StopLoss());
-      if(landed > max_sl_dist + RG_TickSize(symbol) * 1.5)
-        {
-         RG_ClosePositionTicket(ticket, "broker will not allow a stop inside your max loss — closed");
-         return false;
-        }
+      if(sl_past_max)
+         RG_Notify(StringFormat("stop on #%s pulled closer to your max loss",
+                                IntegerToString((long)ticket)));
      }
    return true;
   }
@@ -460,34 +457,41 @@ void RG_EnforceSize(const ulong ticket)
 
    if(over_per001)
      {
-      // Distance problem, not a lot problem. Snap SL; if still illegal, close.
+      // Distance problem, not a lot problem. Pull the stop as close as the
+      // broker allows. If it still sits past 5/0.01 (min stop distance on
+      // gold, freeze, requote), keep the trade and retry next tick — do not
+      // close a scalp because the ceiling cannot be placed *this second*.
       double max_dist = RG_MaxSLDistance(symbol, lots, otype, open_price);
-      if(max_dist <= 0.0)
+      if(max_dist > 0.0)
         {
-         RG_ClosePositionTicket(ticket, "loss per 0.01 over your max — closed");
-         return;
-        }
-      double snap = (ptype == POSITION_TYPE_BUY) ? (open_price - max_dist)
-                                                 : (open_price + max_dist);
-      snap = RG_ClampToStops(symbol, ptype, open_price, snap, true);
-      double tp = g_pos.TakeProfit();
-      if(!RG_ModifySLTP(ticket, snap, tp, "snap SL to max loss/0.01"))
-        {
-         RG_ClosePositionTicket(ticket, "could not tighten the stop to your max loss — closed");
-         return;
+         double snap = (ptype == POSITION_TYPE_BUY) ? (open_price - max_dist)
+                                                    : (open_price + max_dist);
+         snap = RG_ClampToStops(symbol, ptype, open_price, snap, true);
+         double cur_dist = MathAbs(open_price - sl);
+         double snap_dist = MathAbs(open_price - snap);
+         if(snap_dist + RG_TickSize(symbol) * 0.5 < cur_dist)
+           {
+            double tp = g_pos.TakeProfit();
+            if(RG_ModifySLTP(ticket, snap, tp, "snap SL to max loss/0.01"))
+              {
+               if(!g_pos.SelectByTicket(ticket))
+                  return;
+               RG_Notify(StringFormat("stop on #%s pulled closer to your max loss",
+                                      IntegerToString((long)ticket)));
+              }
+            else
+               RG_Log(2, StringFormat("could not tighten stop #%s this tick — retry",
+                                      IntegerToString((long)ticket)));
+           }
         }
       if(!g_pos.SelectByTicket(ticket))
          return;
       sl = g_pos.StopLoss();
-      dist = MathAbs(g_pos.PriceOpen() - sl);
-      if(!RG_DistanceToMoney(symbol, g_pos.Volume(), otype, g_pos.PriceOpen(), dist, risk) ||
-         (risk / (g_pos.Volume() / 0.01) > InpMaxLossPer001 + 1e-6))
-        {
-         RG_ClosePositionTicket(ticket, "stop still risks more than your max per 0.01 — closed");
-         return;
-        }
       lots = g_pos.Volume();
       open_price = g_pos.PriceOpen();
+      dist = MathAbs(open_price - sl);
+      if(!RG_DistanceToMoney(symbol, lots, otype, open_price, dist, risk))
+         return;
       risk_pct = (basis > 0.0) ? (100.0 * risk / basis) : 999.0;
       over_lot = (lots > InpMaxLot + 1e-8);
       over_risk = (risk_pct > InpMaxRiskPercentPerTrade + 1e-9);

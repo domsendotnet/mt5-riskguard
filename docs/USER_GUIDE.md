@@ -1,4 +1,4 @@
-# User guide (RiskGuard 1.20)
+# User guide (RiskGuard 1.22)
 
 You click. RiskGuard watches. If the account is in a state your emotions would like and your math cannot afford, it **fixes it or kills it**. It keeps trying until the account is legal.
 
@@ -15,7 +15,7 @@ It does **not** find entries. It is not a strategy. It is a guardian.
 5. Toolbar **Algo Trading** = green.
 6. The chart box must say **protecting**, not **CANNOT TRADE**.
 7. On demo, open a tiny trade **with no stop**. A stop and a target should appear on the **next tick**.
-8. Optional: run **Scripts → RiskGuard_SelfTest** during market hours. Experts tab should say all PASS.
+8. Optional: in MetaEditor open `Scripts/RiskGuard_SelfTest.mq5` (same folder as the EA) and run it during market hours. Experts tab should say all PASS.
 
 If the box says **CANNOT TRADE**, you are **not** protected. Fix Algo Trading / permissions before you size up.
 
@@ -85,7 +85,7 @@ If it is not allowed (lot too big, risk % too high, day locked, revenge pause, n
 |--------|----------------|
 | Open with no stop / no target | Puts them on, this tick |
 | Delete the stop | Puts it back. Still missing after 3 seconds → closes |
-| Drag the stop farther (more loss) | Snaps it back to the worst-loss ceiling. If the broker cannot place that, closes |
+| Drag the stop farther (more loss) | Pulls it back toward the worst-loss ceiling. If the broker cannot take that stop *yet*, it keeps the tightest legal stop and retries — it does not close for that |
 | Open 0.10 when max lot is 0.05 | Shrinks or closes. If shrinking fails, closes |
 | Place a 0.10 pending | Deletes the pending |
 | Add to a 0.05 loser | Extra is closed (and stays closed on the next ticks) |

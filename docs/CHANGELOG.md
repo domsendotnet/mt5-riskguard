@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.22 — 2026-08-27
+
+Install as one folder. No more copying Include/Scripts into MT5’s global trees.
+
+- `RiskGuard.mq5` lives at the repo root
+- `Include/` and `Scripts/` sit next to it (quoted includes)
+- Copy the whole folder into `MQL5/Experts/` and compile
+
+## 1.21 — 2026-08-27
+
+Keep “worst loss per 0.01” as a real ceiling, not a reason to kill the scalp.
+
+- If the broker will not accept a tighter stop *this tick* (min distance, freeze, requote), park at the tightest legal stop and retry. Do **not** close.
+- Same when a gold min-stop is briefly wider than 5 per 0.01 at entry: wait until price allows, then pull the stop in.
+- Alert only when the stop was actually pulled closer.
+
 ## 1.20 — 2026-08-26
 
 Simpler Inputs without taking away policy. **Re-attach the EA** — the Input list was rebuilt (old saved values would land on the wrong lines).

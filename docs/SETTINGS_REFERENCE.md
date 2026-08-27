@@ -1,4 +1,4 @@
-# Settings reference (RiskGuard 1.20)
+# Settings reference (RiskGuard 1.22)
 
 These names are **exactly** what you see in MetaTrader:
 
@@ -57,7 +57,7 @@ This chart’s symbol is always included. There is no “watch the whole account
 | What you see | Default | Meaning |
 |--------------|---------|---------|
 | Biggest lot on ONE trade | `0.05` | A bigger fill is shrunk, or closed if it cannot be shrunk. |
-| Worst loss allowed per 0.01 lot (your money) | `5.0` | Hard ceiling. Dragging the stop farther is blocked. |
+| Worst loss allowed per 0.01 lot (your money) | `5.0` | Hard ceiling. RiskGuard pulls the stop in to this. If the broker will not take that stop *yet* (gold min distance), it keeps the tightest legal stop and retries — it does not close the trade. |
 | Normal stop: lose this much per 0.01 lot if hit | `3.0` | The usual breath. |
 | Take-profit: bank this much per 0.01 lot | `4.0` | The usual bank. With 2+ trades open, per-trade targets are cleared so they exit together instead. |
 | One trade may not risk more than this % of the account | `1.0` | Size vs account. Uses **equity** (open P/L counts). |

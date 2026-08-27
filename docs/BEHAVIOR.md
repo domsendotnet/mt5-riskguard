@@ -1,4 +1,4 @@
-# Behavior specification (RiskGuard 1.20)
+# Behavior specification (RiskGuard 1.22)
 
 This is the **engineer’s spec** — exact runtime rules. If you are using the EA, start with [USER_GUIDE.md](USER_GUIDE.md) and [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). Those use the same words as the Inputs dialog.
 
@@ -75,10 +75,10 @@ Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fail
 ## Stop loss rules
 
 - If SL missing → set to auto distance (preferred breath, money/0.01).
-- If current SL distance implies loss > `MaxLossPer001` scale → snap SL to max-risk distance.
-- If broker clamp still leaves loss/0.01 above the hard max → **close**.
+- If current SL distance implies loss > `MaxLossPer001` scale → snap SL as close as the broker allows.
+- If broker min-distance / freeze / requote still leaves loss/0.01 above the hard max → **keep the tightest legal stop and retry next tick**. Do not close the trade for that.
 - If still naked after timeout → close.
-- Loss/0.01 over max is **not** fixed by reducing lot (risk per 0.01 is a distance). Snap or close.
+- Loss/0.01 over max is **not** fixed by reducing lot (risk per 0.01 is a distance). Snap when price allows.
 
 ## Take profit rules
 

@@ -4,12 +4,12 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.20"
+#property version   "1.22"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
 #property description "tiny-profit basket exit, dead-trade timer, and a day kill-switch."
 
-#include <RiskGuard/RiskGuard_Panel.mqh>
+#include "Include/RiskGuard_Panel.mqh"
 
 //+------------------------------------------------------------------+
 void RG_SelectWhitelistSymbols()
@@ -96,7 +96,7 @@ int OnInit()
    RG_GuardianSweep();
    RG_PanelUpdate();
 
-   RG_Log(1, "RiskGuard 1.20 started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.22 started on " + _Symbol);
    return INIT_SUCCEEDED;
   }
 

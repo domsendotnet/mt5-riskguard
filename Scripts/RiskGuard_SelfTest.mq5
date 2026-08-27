@@ -4,12 +4,12 @@
 //|  during liquid hours. Read PASS/FAIL in the Experts tab.        |
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
-#property version   "1.20"
+#property version   "1.22"
 #property strict
 #property script_show_confirm
 #property description "RiskGuard self-test: money math, tick rounding, volume, basket target."
 
-#include <RiskGuard/RiskGuard_Utils.mqh>
+#include "../Include/RiskGuard_Utils.mqh"
 
 int g_pass = 0;
 int g_fail = 0;
@@ -32,7 +32,7 @@ void RG_Expect(const bool cond, const string name, const string detail)
 //+------------------------------------------------------------------+
 void OnStart()
   {
-   Print("========== RiskGuard self-test 1.20 ==========");
+   Print("========== RiskGuard self-test 1.22 ==========");
    Print("Symbol ", _Symbol, "  digits ", (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS),
          "  tick ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE), 8),
          "  tick_value ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE), 8));
