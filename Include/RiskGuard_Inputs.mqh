@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                           RiskGuard_Inputs.mqh |
 //|  Policy only. Implementation details are built-in constants.   |
-//|  1.20 breaks old Input order — remove EA from chart, re-attach. |
+//|  1.28: production pass — no-trade hours on by default.         |
 //+------------------------------------------------------------------+
 #ifndef RISKGUARD_INPUTS_MQH
 #define RISKGUARD_INPUTS_MQH
@@ -21,6 +21,16 @@ enum ENUM_RG_ALERTS
    RG_ALERT_PHONE = 3          // Pop-up, sound, and phone
   };
 
+enum ENUM_RG_CLOCK
+  {
+   RG_CLOCK_BERLIN  = 0,  // Europe/Berlin (CET/CEST — DST automatic) — recommended
+   RG_CLOCK_SERVER  = 1,  // Broker server clock (type the hours as MT5 shows them)
+   RG_CLOCK_UTC     = 2,  // UTC
+   RG_CLOCK_LOCAL   = 3,  // This computer's clock
+   RG_CLOCK_LONDON  = 4,  // Europe/London (GMT/BST — DST automatic)
+   RG_CLOCK_NEWYORK = 5   // America/New York (EST/EDT — DST automatic)
+  };
+
 //====================================================================
 // 1. START
 //====================================================================
@@ -35,11 +45,10 @@ input string             InpSymbolsWhitelist = "";             // Also watch the
 //====================================================================
 input group "═══ 2. Your money ═══"
 input double InpMaxLot                 = 0.05;  // Biggest lot on ONE trade
-input double InpMaxLossPer001          = 5.0;   // Worst loss allowed per 0.01 lot (your money)
-input double InpSL_MoneyPer001         = 3.0;   // Normal stop: lose this much per 0.01 lot if hit
+input double InpMaxLossPer001          = 5.0;   // Stop: lose this much per 0.01 lot if hit (your money)
 input double InpTP_MoneyPer001         = 4.0;   // Take-profit: bank this much per 0.01 lot
-input double InpMaxRiskPercentPerTrade = 1.0;   // One trade may not risk more than this % of the account
-input double InpMaxTotalRiskPercent    = 2.0;   // All open trades together may not risk more than this %
+input double InpMaxRiskPercentPerTrade = 0.0;   // Optional: one trade max % of equity (0 = off — lot and stop are enough)
+input double InpMaxTotalRiskPercent    = 0.0;   // Optional: all trades together max % of equity (0 = off)
 
 //====================================================================
 // 3. ADDING TO LOSERS
@@ -47,7 +56,7 @@ input double InpMaxTotalRiskPercent    = 2.0;   // All open trades together may 
 input group "═══ 3. Adding to losers ═══"
 input int    InpAveragingMaxAdds        = 2;     // How many extras (0 = never add). Original + this many.
 input double InpAveragingMaxLot         = 0.02;  // Add only if EVERY open trade is this lot or smaller
-input double InpAveragingMaxRiskPercent = 0.50;  // Add only if open risk is this % of the account or less
+input double InpAveragingMaxRiskPercent = 0.0;   // Optional: add only if open risk ≤ this % (0 = off — add-on lot is enough)
 input double InpBasketMinProfit         = 0.01;  // Close all together at this tiny profit (your money, before commission)
 input double InpCommissionPer001        = 0.04;  // Your broker commission per 0.01 lot (so "tiny profit" is after costs)
 
@@ -74,11 +83,18 @@ input int              InpPanelX      = 12;                   // Left-right offs
 input int              InpPanelY      = 24;                   // Up-down offset from that corner (pixels)
 
 //====================================================================
+// 6. NO-TRADE HOURS (added at the end — older saved Inputs keep their values)
+//====================================================================
+input group "═══ 6. No-trade hours ═══"
+input ENUM_RG_CLOCK InpNoTradeClock = RG_CLOCK_BERLIN; // Clock for the hours below (DST handled; server is converted)
+input string        InpNoTradeHours = "13:45-15:15,16:00-16:05"; // Close EVERYTHING in these hours (Berlin by default). Empty = off
+
+//====================================================================
 // Built-in policy — always on. Not in the dialog.
 //====================================================================
 #define RG_TIMER_SECONDS            1
 #define RG_MODIFY_RETRIES           3
-#define RG_MAX_SLIPPAGE_POINTS      30
+#define RG_MAX_SLIPPAGE_POINTS      30   // floor; live closes use max(this, 3× spread)
 #define RG_NAKED_SL_TIMEOUT_SEC     3
 #define RG_ALERT_SOUND_FILE         "alert.wav"
 #define RG_LOG_VERBOSITY            1
@@ -116,6 +132,15 @@ bool RG_PolicyTimeOn()
 bool RG_PolicyDayOn()
   {
    return (InpMaxDayLossPercent > 0.0 || InpMaxDayTrades > 0);
+  }
+
+//+------------------------------------------------------------------+
+bool RG_PolicyNoTradeHoursOn()
+  {
+   string s = InpNoTradeHours;
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   return (StringLen(s) > 0);
   }
 
 #endif // RISKGUARD_INPUTS_MQH

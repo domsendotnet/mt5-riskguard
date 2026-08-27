@@ -88,7 +88,7 @@ void RG_PanelUpdate()
    int open_n = RG_CountManaged(_Symbol);
    int cap = RG_AllowedMaxPositions(_Symbol);
    int shown_cap = cap;
-   if(g_dayLocked || RG_IsCooldownActive())
+   if(g_dayLocked || RG_IsCooldownActive() || RG_IsNoTradeHoursActive())
       shown_cap = open_n; // cannot add
    int pend_n = RG_CountManagedPendings(_Symbol);
    double basket_net = RG_BasketNetProfit(_Symbol);
@@ -102,6 +102,8 @@ void RG_PanelUpdate()
       status_clr = RG_PANEL_DANGER_COLOR;
    else if(g_dayLocked)
       status_clr = RG_PANEL_DANGER_COLOR;
+   else if(RG_IsNoTradeHoursActive())
+      status_clr = RG_PANEL_DANGER_COLOR;
    else if(RG_IsCooldownActive())
       status_clr = RG_PANEL_WARN_COLOR;
    else if(!InpEnableGuard)
@@ -114,6 +116,8 @@ void RG_PanelUpdate()
       mode = "CANNOT TRADE";
    else if(g_dayLocked)
       mode = "DAY LOCKED";
+   else if(RG_IsNoTradeHoursActive())
+      mode = "NO TRADE HOURS";
    else if(RG_IsCooldownActive())
       mode = "REVENGE PAUSE";
    else if(open_n >= 2)
@@ -121,13 +125,19 @@ void RG_PanelUpdate()
    else
       mode = "ONE TRADE";
 
+   string hours_line = RG_PolicyNoTradeHoursOn() ? RG_NoTradeHoursPanelLine() : "";
+   int lines = 11 + ((StringLen(hours_line) > 0) ? 1 : 0);
    int line = 0;
-   RG_PanelSetBackground(11);
+   RG_PanelSetBackground(lines);
    RG_PanelSetLabel("h", line++, "RISKGUARD  ·  " + _Symbol, status_clr);
    RG_PanelSetLabel("e", line++, StringFormat("Account %s   Today P/L %+.2f",
                     RG_FmtMoney(equity), day_pnl), RG_PANEL_TEXT_COLOR);
-   RG_PanelSetLabel("r", line++, StringFormat("At risk %s (%.2f%%)   Max one trade %.2f%%",
-                    RG_FmtMoney(open_risk), risk_pct, InpMaxRiskPercentPerTrade), RG_PANEL_TEXT_COLOR);
+   if(InpMaxRiskPercentPerTrade > 0.0)
+      RG_PanelSetLabel("r", line++, StringFormat("At risk %s (%.2f%%)   Max one trade %.2f%%",
+                       RG_FmtMoney(open_risk), risk_pct, InpMaxRiskPercentPerTrade), RG_PANEL_TEXT_COLOR);
+   else
+      RG_PanelSetLabel("r", line++, StringFormat("At risk %s (%.2f%%)   Max lot %.2f",
+                       RG_FmtMoney(open_risk), risk_pct, InpMaxLot), RG_PANEL_TEXT_COLOR);
    RG_PanelSetLabel("p", line++, StringFormat("Open trades %d / %d   Pending orders %d   Never more than %d",
                     open_n, shown_cap, pend_n, RG_PolicyHardMaxPositions()), RG_PANEL_TEXT_COLOR);
    RG_PanelSetLabel("a", line++, avg ? "Adding to losers: YES"
@@ -140,8 +150,14 @@ void RG_PanelUpdate()
                        basket_net, basket_tgt, acct),
                        (basket_net >= basket_tgt ? RG_PANEL_ACCENT_COLOR : RG_PANEL_TEXT_COLOR));
    else
-      RG_PanelSetLabel("b", line++, StringFormat("Stop %.2f / 0.01   Target %.2f / 0.01   Worst %.2f / 0.01  [%s]",
-                       InpSL_MoneyPer001, InpTP_MoneyPer001, InpMaxLossPer001, acct), RG_PANEL_TEXT_COLOR);
+      RG_PanelSetLabel("b", line++, StringFormat("Stop %.2f / 0.01   Target %.2f / 0.01  [%s]",
+                       InpMaxLossPer001, InpTP_MoneyPer001, acct), RG_PANEL_TEXT_COLOR);
+
+   if(StringLen(hours_line) > 0)
+      RG_PanelSetLabel("h2", line++, hours_line,
+                       RG_IsNoTradeHoursActive() ? RG_PANEL_DANGER_COLOR : RG_PANEL_TEXT_COLOR);
+   else
+      ObjectDelete(0, RG_PANEL_PREFIX + "h2");
 
    RG_PanelSetLabel("m", line++, mode + "  ·  " + g_lastStatusReason, status_clr);
    RG_PanelSetLabel("l", line++, "Last action: " + g_lastAction, RG_PANEL_TEXT_COLOR);

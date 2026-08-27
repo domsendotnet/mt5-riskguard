@@ -1,4 +1,4 @@
-# Install & compile (RiskGuard 1.23)
+# Install & compile (RiskGuard 1.28)
 
 Everything you need sits in **one folder**: the EA, `Include/`, `Scripts/`, and `docs/`. Do not split them into MT5’s global Include/Scripts trees.
 
@@ -41,8 +41,8 @@ If you see `cannot open include file`, `Include/` is not sitting next to `RiskGu
 
 1. Navigator → **Expert Advisors** → your folder → drag **RiskGuard** onto **XAUUSD M1**.
 2. **Common** tab: tick **Allow Algo Trading**.
-3. **Inputs** tab: five groups, 27 settings. Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)  
-   **Upgrading from 1.11 or earlier:** remove the EA from the chart, then attach it again (Inputs list was rebuilt in 1.20).
+3. **Inputs** tab: six groups, 28 settings. Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)  
+   **Upgrading from 1.23 or earlier:** remove the EA from the chart, then attach it again (1.24 removed one Input; 1.20 rebuilt the list).
 4. OK. Toolbar **Algo Trading** must be **green**.
 
 ## 5. Confirm it is alive
@@ -52,7 +52,7 @@ Chart box: `RISKGUARD · XAUUSD`. Status line should contain **protecting**.
 Experts log:
 
 ```text
-RiskGuard| RiskGuard 1.23 started on XAUUSD
+RiskGuard| RiskGuard 1.28 started on XAUUSD
 ```
 
 If the box says **CANNOT TRADE**, you are not protected. Typical causes:
@@ -76,8 +76,13 @@ Optional self-test: in MetaEditor open `Scripts/RiskGuard_SelfTest.mq5` (same fo
 
 ## 7. Updating
 
-Replace the whole folder (or the `.mq5` / `Include/` / `Scripts/` files together), recompile, remove the EA from the chart, attach again.
+Replace the **whole folder** (EA + `Include/` + `Scripts/` together), recompile, remove the EA from the chart, attach again.
 
-1.20 rebuilt the Inputs list. After that upgrade, always **re-attach** so values do not shift onto the wrong line.
+- **From 1.27:** 1.28 does not change Input order. Recompile and reload. Experts log must say `RiskGuard 1.28 started`. Confirm the no-trade hours box is not empty if you saved 1.27 with it blank.
+- **From 1.26:** 1.27 **appended** group 6 (no-trade hours). Old values stay. Recompile and reload. Then set hours (1.28 default is `13:45-15:15,16:00-16:05` on a fresh attach).
+- **From 1.25:** 1.26 does not change the Input list. Recompile and reload the EA.
+- **From 1.23 or earlier:** 1.24 dropped the extra stop Input. Re-attach or values land on the wrong lines.
+- **From 1.11 or earlier:** Inputs were also rebuilt in 1.20. Re-attach.
+- **From the old split layout** (`MQL5/Experts/RiskGuard.mq5` + `MQL5/Include/RiskGuard/`): delete those copies. From 1.22 the whole repo folder goes into `MQL5/Experts/` and stays together.
 
 Day lock and today’s trade count survive a reload (stored in the terminal for this account).

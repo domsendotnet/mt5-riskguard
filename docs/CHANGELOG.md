@@ -1,5 +1,54 @@
 # Changelog
 
+Current build: **1.28**. Every doc in `docs/` plus `README.md` is written for that version.
+
+## 1.28 — 2026-08-27
+
+Ship pass. No new knobs.
+
+- No-trade hours default is now `13:45-15:15,16:00-16:05` (Berlin clock). Empty still means off. If you already saved 1.27 with an empty box, type the slots yourself — saved Inputs win over a new default.
+- Do not send closes from `OnInit` (brokers often reject that). First tick / 1s timer does the work. If you attach *inside* a slot, Experts warns and the next tick flattens.
+- Hours that are set but cannot be parsed at runtime **block** (fail-closed), not silently off.
+- Tabs/newlines in the hours box are ignored. Server-offset log no longer always says “Berlin”.
+
+## 1.27 — 2026-08-27
+
+No-trade hours. You type the clock you live by; RiskGuard maps it onto the broker server (including DST).
+
+- New group **6. No-trade hours** (two Inputs, **appended** — older saved values do not shift)
+- Clock: Europe/Berlin (CET/CEST) default, or server / UTC / this PC / London / New York
+- Slots: `13:45-15:15,16:00-16:05` (comma-separated, as many as you need, empty = off). End minute is included (`16:00-16:05` covers 16:05:00–16:05:59). Overnight wrap is allowed (`22:00-02:00`)
+- While a slot is live: **every watched trade is closed** (already-open and new fills), pendings are deleted, and it keeps trying until the clock is out of the slot
+- Experts log on start prints Berlin vs server vs UTC and each slot on the server clock so you can see the 1-hour gap
+- Chart box: **NO TRADE HOURS** plus a line `now 14:03 = server 13:03`
+
+## 1.26 — 2026-08-27
+
+Audit fixes. These were holes, not style.
+
+- **Already past the stop → close.** If floating loss (or the quote) is already at your stop money, RiskGuard market-closes. It will not plant a stop *behind* the market. That is how a 5-per-0.01 ceiling could become an 8–10 loss on a fill that did not have a stop yet. 1.21 still applies *before* you have used the 5: keep the tightest legal stop and retry.
+- **Revenge pause could miss a loss.** A full close arriving on `DEAL_ADD` while the ticket was still in the position list was marked seen as a “partial” and never counted. Cooldown now waits ~2s for the list to settle; real partials still do not start the pause.
+- **Closes used a 30-point deviation.** On 3-digit gold that is 3 cents — spike closes got rejected. Deviation is now `max(30, 3× spread)` per symbol (capped).
+- **Buy+sell mix** now closes the *other direction* (oldest leg keeps its side), not “newest extra” which could kill a same-direction add and leave the hedge. Opposite-direction *pendings* are deleted before they fill.
+- Partial-close “OK” with a stale volume cache no longer escalates to a full close if the broker already filled the cut.
+
+## 1.25 — 2026-08-27
+
+% of account no longer silently fights the lot you typed.
+
+- One-trade % and combined % default to **0 = off**. Size is max lot × stop unless you opt into %.
+- Add-on % default **0 = off**. Adding is extras + add-on lot unless you opt into %.
+- Experts warning if max lot at your stop already exceeds the one-trade % (set % to 0 if you want the lot).
+- Input order unchanged; if you already saved 1% / 2% / 0.50%, set them to **0** yourself.
+
+## 1.24 — 2026-08-27
+
+One stop number. “Normal” 3 vs “worst” 5 was two names for the same idea.
+
+- Removed the extra “normal stop per 0.01” Input
+- **Stop: lose this much per 0.01 lot if hit** is both the auto-stop and the widen ceiling (default `5.0`)
+- **Re-attach the EA** — Inputs shifted by one line after this removal
+
 ## 1.23 — 2026-08-27
 
 Max lot is enforced immediately, even if the stop is not on yet.

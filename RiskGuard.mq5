@@ -4,10 +4,10 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.23"
+#property version   "1.28"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
-#property description "tiny-profit basket exit, dead-trade timer, and a day kill-switch."
+#property description "tiny-profit basket exit, dead-trade timer, day kill-switch, no-trade hours."
 
 #include "Include/RiskGuard_Panel.mqh"
 
@@ -46,12 +46,13 @@ int OnInit()
    g_lastStatusReason = "starting";
    g_lastNotifyMsg = "";
    g_lastNotifyTime = 0;
+   g_noTradeWasActive = false;
    ArrayInitialize(g_seenDeals, 0);
    RG_StateLoad();
 
    if(InpMaxLot <= 0.0 || InpMaxLossPer001 <= 0.0)
      {
-      Print("RiskGuard| Biggest lot and worst loss per 0.01 must be > 0");
+      Print("RiskGuard| Biggest lot and stop per 0.01 must be > 0");
       return INIT_PARAMETERS_INCORRECT;
      }
    if(InpAveragingMaxAdds < 0)
@@ -59,9 +60,9 @@ int OnInit()
       Print("RiskGuard| Extra trades cannot be negative (use 0 to never add)");
       return INIT_PARAMETERS_INCORRECT;
      }
-   if(InpSL_MoneyPer001 <= 0.0 || InpTP_MoneyPer001 <= 0.0)
+   if(InpTP_MoneyPer001 <= 0.0)
      {
-      Print("RiskGuard| Normal stop and take-profit per 0.01 must be > 0");
+      Print("RiskGuard| Take-profit per 0.01 must be > 0");
       return INIT_PARAMETERS_INCORRECT;
      }
 
@@ -73,12 +74,32 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
      }
 
-   if(InpSL_MoneyPer001 > InpMaxLossPer001)
-      Print("RiskGuard| WARNING: normal stop per 0.01 is larger than worst loss — the ceiling wins");
-
    if(InpMustBeGreenSeconds > 0 && InpMaxHoldSeconds > 0 &&
       InpMustBeGreenSeconds > InpMaxHoldSeconds)
       Print("RiskGuard| WARNING: 'still not in profit' seconds is longer than max hold — max hold wins");
+
+   if(InpAveragingMaxAdds > 0 && InpAveragingMaxLot > InpMaxLot + 1e-8)
+      Print("RiskGuard| WARNING: add-on max lot is bigger than biggest lot — the biggest-lot cap already blocks that");
+
+   string hours_err;
+   if(!RG_NoTradeHoursValidate(hours_err))
+     {
+      Print("RiskGuard| No-trade hours: ", hours_err,
+            " — use 13:45-15:15,16:00-16:05 (empty = off)");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+
+   double eq = AccountInfoDouble(ACCOUNT_EQUITY);
+   if(InpMaxRiskPercentPerTrade > 0.0 && eq > 0.0)
+     {
+      double lot_risk = RG_ScaledMoneyPer001(InpMaxLossPer001, InpMaxLot);
+      double pct_money = eq * InpMaxRiskPercentPerTrade / 100.0;
+      if(lot_risk > pct_money + 1e-6)
+         Print("RiskGuard| WARNING: max lot at your stop risks about ",
+               DoubleToString(lot_risk, 2), " but one-trade % only allows ",
+               DoubleToString(pct_money, 2),
+               " — the % will shrink lots (set that % to 0 if you want the lot you typed)");
+     }
 
    RG_SelectWhitelistSymbols();
    RG_ConfigureTrade();
@@ -93,10 +114,13 @@ int OnInit()
       return INIT_FAILED;
      }
 
-   RG_GuardianSweep();
+   RG_Log(1, "RiskGuard 1.28 started on " + _Symbol);
+   RG_LogNoTradeHoursMapping();
+   if(RG_IsNoTradeHoursActive())
+      Print("RiskGuard| WARNING: inside a no-trade slot right now — watched trades will be closed on the next tick");
+   // Do not send trades from OnInit (brokers reject it). Timer/tick sweep takes over.
+   RG_RefreshStatusReason();
    RG_PanelUpdate();
-
-   RG_Log(1, "RiskGuard 1.23 started on " + _Symbol);
    return INIT_SUCCEEDED;
   }
 

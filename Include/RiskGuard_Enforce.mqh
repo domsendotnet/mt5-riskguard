@@ -47,6 +47,11 @@ bool RG_AveragingPrivilegeOK(const string symbol, string &reason,
          reason = "revenge pause after a loss";
          return false;
         }
+      if(RG_IsNoTradeHoursActive())
+        {
+         reason = "no-trade hours";
+         return false;
+        }
      }
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -69,7 +74,7 @@ bool RG_AveragingPrivilegeOK(const string symbol, string &reason,
       return false;
      }
    double risk_pct = 100.0 * RG_TotalOpenRiskMoney(symbol) / basis;
-   if(risk_pct > InpAveragingMaxRiskPercent + 1e-9)
+   if(InpAveragingMaxRiskPercent > 0.0 && risk_pct > InpAveragingMaxRiskPercent + 1e-9)
      {
       reason = StringFormat("open risk %.2f%% (adds need ≤ %.2f%%)", risk_pct, InpAveragingMaxRiskPercent);
       return false;
@@ -98,7 +103,24 @@ bool RG_ClosePositionTicket(const ulong ticket, const string why)
    string symbol = g_pos.Symbol();
    RG_PrepareTrade(symbol);
    g_trade.SetExpertMagicNumber(g_pos.Magic());
-   bool ok = g_trade.PositionClose(ticket, RG_MAX_SLIPPAGE_POINTS);
+   int dev = RG_DeviationPoints(symbol);
+   bool ok = g_trade.PositionClose(ticket, (ulong)dev);
+   uint rc = g_trade.ResultRetcode();
+   // A full close that only partially fills is not closed.
+   if(ok && rc == TRADE_RETCODE_DONE_PARTIAL)
+      ok = false;
+   if(ok && g_pos.SelectByTicket(ticket))
+     {
+      // Terminal cache can lag a real close. A deal ticket means the
+      // broker took it — treat as success and let the next sweep confirm
+      // it is gone. No deal + still selected = did not actually close.
+      if(g_trade.ResultDeal() == 0)
+        {
+         RG_Log(0, StringFormat("close said OK but #%s still open (no deal) — will retry",
+                                IntegerToString((long)ticket)));
+         ok = false;
+        }
+     }
    if(ok)
       RG_Notify(StringFormat("closed #%s (%s) — %s", IntegerToString((long)ticket), symbol, why));
    else
@@ -124,7 +146,26 @@ bool RG_ReducePositionTo(const ulong ticket, const double target_lots, const str
       return false;
    RG_PrepareTrade(symbol);
    g_trade.SetExpertMagicNumber(g_pos.Magic());
-   bool ok = g_trade.PositionClosePartial(ticket, close_vol, RG_MAX_SLIPPAGE_POINTS);
+   int dev = RG_DeviationPoints(symbol);
+   bool ok = g_trade.PositionClosePartial(ticket, close_vol, (ulong)dev);
+   if(ok)
+     {
+      double filled = g_trade.ResultVolume();
+      bool volume_ok = false;
+      if(!g_pos.SelectByTicket(ticket))
+         volume_ok = true; // gone entirely
+      else if(g_pos.Volume() <= tgt + 1e-8)
+         volume_ok = true;
+      else if(filled + 1e-8 >= close_vol && g_trade.ResultDeal() > 0)
+         volume_ok = true; // cache still shows old volume; broker filled the cut
+      if(!volume_ok)
+        {
+         RG_Log(0, StringFormat("partial close said OK but #%s still %.2f (wanted %.2f, filled %.2f)",
+                                IntegerToString((long)ticket),
+                                g_pos.SelectByTicket(ticket) ? g_pos.Volume() : 0.0, tgt, filled));
+         ok = false;
+        }
+     }
    if(ok)
       RG_Notify(StringFormat("reduced #%s to %.2f — %s", IntegerToString((long)ticket), tgt, why));
    else
@@ -215,17 +256,6 @@ void RG_DeleteManagedPendings(const string symbol_filter, const string why)
   }
 
 //+------------------------------------------------------------------+
-double RG_DesiredSLDistance(const string symbol, const double lots,
-                            const ENUM_ORDER_TYPE otype, const double open_price)
-  {
-   double money = RG_ScaledMoneyPer001(InpSL_MoneyPer001, lots);
-   double dist = 0.0;
-   if(!RG_MoneyToDistance(symbol, lots, otype, open_price, money, dist))
-      return 0.0;
-   return dist;
-  }
-
-//+------------------------------------------------------------------+
 double RG_MaxSLDistance(const string symbol, const double lots,
                         const ENUM_ORDER_TYPE otype, const double open_price)
   {
@@ -294,8 +324,8 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
    int basket = RG_CountManaged(symbol);
    bool in_basket = (basket >= 2);
 
-   double sl_dist = RG_DesiredSLDistance(symbol, lots, otype, open_price);
-   double max_sl_dist = RG_MaxSLDistance(symbol, lots, otype, open_price);
+   double sl_dist = RG_MaxSLDistance(symbol, lots, otype, open_price);
+   double max_sl_dist = sl_dist;
 
    if(sl_dist <= 0.0 && cur_sl <= 0.0)
      {
@@ -315,6 +345,14 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
      {
       double target_sl = (ptype == POSITION_TYPE_BUY) ? (open_price - sl_dist)
                                                       : (open_price + sl_dist);
+      double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+      double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+      if((ptype == POSITION_TYPE_BUY && bid > 0.0 && bid <= target_sl) ||
+         (ptype == POSITION_TYPE_SELL && ask > 0.0 && ask >= target_sl))
+        {
+         RG_ClosePositionTicket(ticket, "already past your stop — closed");
+         return false;
+        }
       new_sl = RG_ClampToStops(symbol, ptype, open_price, target_sl, true);
       changed = true;
      }
@@ -404,8 +442,13 @@ double RG_MaxAllowedLotForRisk(const string symbol, const ENUM_ORDER_TYPE otype,
       if(!measured)
          risk = RG_ScaledMoneyPer001(InpMaxLossPer001, mid);
 
-      double pct_cap = (basis > 0.0) ? (basis * InpMaxRiskPercentPerTrade / 100.0) : 0.0;
-      bool ok = (mid <= InpMaxLot + 1e-8) && (risk <= pct_cap + 1e-8);
+      bool ok = (mid <= InpMaxLot + 1e-8);
+      if(InpMaxRiskPercentPerTrade > 0.0 && basis > 0.0)
+        {
+         double pct_cap = basis * InpMaxRiskPercentPerTrade / 100.0;
+         if(risk > pct_cap + 1e-8)
+            ok = false;
+        }
       if(ok)
         {
          best = mid;
@@ -473,7 +516,8 @@ void RG_EnforceSize(const ulong ticket)
    double risk_pct = (basis > 0.0) ? (100.0 * risk / basis) : 999.0;
 
    bool over_lot = (lots > InpMaxLot + 1e-8);
-   bool over_risk = (risk_pct > InpMaxRiskPercentPerTrade + 1e-9);
+   bool over_risk = (InpMaxRiskPercentPerTrade > 0.0 &&
+                     risk_pct > InpMaxRiskPercentPerTrade + 1e-9);
    bool over_per001 = false;
    if(lots >= 0.01 - 1e-8)
      {
@@ -521,7 +565,8 @@ void RG_EnforceSize(const ulong ticket)
          return;
       risk_pct = (basis > 0.0) ? (100.0 * risk / basis) : 999.0;
       over_lot = (lots > InpMaxLot + 1e-8);
-      over_risk = (risk_pct > InpMaxRiskPercentPerTrade + 1e-9);
+      over_risk = (InpMaxRiskPercentPerTrade > 0.0 &&
+                   risk_pct > InpMaxRiskPercentPerTrade + 1e-9);
      }
 
    if(!over_lot && !over_risk)
@@ -538,6 +583,49 @@ void RG_EnforceSize(const ulong ticket)
      }
    if(!RG_ReducePositionTo(ticket, allowed, StringFormat("too big — shrunk from %.2f", lots)))
       RG_ClosePositionTicket(ticket, "could not shrink the lot — closed the whole trade");
+  }
+
+//+------------------------------------------------------------------+
+// If floating loss (or the quote) is already at/through the money stop,
+// close now. Do NOT plant a stop behind the market — that is how a 5
+// ceiling quietly became a 8–10 loss when the fill had no SL yet.
+// 1.21 still applies when you are NOT through: keep the tightest legal
+// stop and retry. This only fires once you have already used the 5.
+//+------------------------------------------------------------------+
+void RG_EnforceHardMoneyStop(const ulong ticket)
+  {
+   if(!g_pos.SelectByTicket(ticket))
+      return;
+   string symbol = g_pos.Symbol();
+   double lots = g_pos.Volume();
+   if(lots <= 0.0)
+      return;
+   double open_price = g_pos.PriceOpen();
+   ENUM_POSITION_TYPE ptype = g_pos.PositionType();
+   ENUM_ORDER_TYPE otype = (ptype == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+
+   double max_loss = RG_ScaledMoneyPer001(InpMaxLossPer001, lots);
+   double pnl = g_pos.Profit() + g_pos.Swap();
+   bool through = (pnl <= -max_loss);
+
+   // Geometric backup when floating P/L has not caught up yet (fresh fill
+   // into a gap). Skip when already green — the quote cannot be through.
+   if(!through && pnl <= 0.0)
+     {
+      double sl_dist = RG_MaxSLDistance(symbol, lots, otype, open_price);
+      if(sl_dist > 0.0)
+        {
+         double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+         double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+         if(ptype == POSITION_TYPE_BUY)
+            through = (bid > 0.0 && bid <= open_price - sl_dist);
+         else
+            through = (ask > 0.0 && ask >= open_price + sl_dist);
+        }
+     }
+
+   if(through)
+      RG_ClosePositionTicket(ticket, "already past your stop — closed");
   }
 
 //+------------------------------------------------------------------+
@@ -575,6 +663,60 @@ void RG_CloseNewestOnSymbol(const string symbol, const int close_count, const st
       if(!RG_ClosePositionTicket(tickets[k], why))
          return;
       left--;
+     }
+  }
+
+//+------------------------------------------------------------------+
+void RG_CloseWrongDirectionOnSymbol(const string symbol, const string why)
+  {
+   datetime oldest_time = 0;
+   ENUM_POSITION_TYPE keep = POSITION_TYPE_BUY;
+   bool have = false;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(!RG_SelectManagedByIndex(i))
+         continue;
+      if(g_pos.Symbol() != symbol)
+         continue;
+      datetime t = g_pos.Time();
+      if(!have || t < oldest_time)
+        {
+         have = true;
+         oldest_time = t;
+         keep = g_pos.PositionType();
+        }
+     }
+   if(!have)
+      return;
+
+   ulong tickets[];
+   datetime times[];
+   int n = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(!RG_SelectManagedByIndex(i))
+         continue;
+      if(g_pos.Symbol() != symbol)
+         continue;
+      if(g_pos.PositionType() == keep)
+         continue;
+      ArrayResize(tickets, n + 1);
+      ArrayResize(times, n + 1);
+      tickets[n] = g_pos.Ticket();
+      times[n] = g_pos.Time();
+      n++;
+     }
+   for(int a = 0; a < n; a++)
+      for(int b = a + 1; b < n; b++)
+         if(times[b] > times[a])
+           {
+            datetime td = times[a]; times[a] = times[b]; times[b] = td;
+            ulong tk = tickets[a]; tickets[a] = tickets[b]; tickets[b] = tk;
+           }
+   for(int k = 0; k < n; k++)
+     {
+      if(!RG_ClosePositionTicket(tickets[k], why))
+         return;
      }
   }
 
@@ -624,8 +766,10 @@ void RG_EnforcePositionCaps()
          int sells = RG_CountManagedDirection(symbol, POSITION_TYPE_SELL);
          if(buys > 0 && sells > 0)
            {
-            int extra = (int)MathMin(buys, sells);
-            RG_CloseNewestOnSymbol(symbol, extra, "buy+sell mix not allowed — extra trade closed");
+            // Keep the oldest leg's direction. Closing "newest extra" without
+            // looking at side could kill a same-direction add and leave the
+            // hedge sitting for another tick.
+            RG_CloseWrongDirectionOnSymbol(symbol, "buy+sell mix not allowed — extra trade closed");
             total = RG_CountManaged(symbol);
            }
         }
@@ -639,7 +783,8 @@ void RG_EnforcePositionCaps()
   }
 
 //+------------------------------------------------------------------+
-bool RG_PendingWouldBeIllegal(const string symbol, const double volume, string &why)
+bool RG_PendingWouldBeIllegal(const string symbol, const double volume,
+                              const long order_type, string &why)
   {
    why = "";
    if(volume > InpMaxLot + 1e-8)
@@ -648,14 +793,33 @@ bool RG_PendingWouldBeIllegal(const string symbol, const double volume, string &
       return true;
      }
 
-   double basis = RG_RiskBasis();
-   if(basis > 0.0)
+   bool pending_buy = (order_type == ORDER_TYPE_BUY_LIMIT ||
+                       order_type == ORDER_TYPE_BUY_STOP ||
+                       order_type == ORDER_TYPE_BUY_STOP_LIMIT);
+   int buys = RG_CountManagedDirection(symbol, POSITION_TYPE_BUY);
+   int sells = RG_CountManagedDirection(symbol, POSITION_TYPE_SELL);
+   if(pending_buy && sells > 0)
      {
-      double worst = RG_ScaledMoneyPer001(InpMaxLossPer001, volume);
-      if(100.0 * worst / basis > InpMaxRiskPercentPerTrade + 1e-9)
+      why = "pending is the other direction — mix not allowed";
+      return true;
+     }
+   if(!pending_buy && buys > 0)
+     {
+      why = "pending is the other direction — mix not allowed";
+      return true;
+     }
+
+   if(InpMaxRiskPercentPerTrade > 0.0)
+     {
+      double basis = RG_RiskBasis();
+      if(basis > 0.0)
         {
-         why = "pending would risk more than one trade is allowed to";
-         return true;
+         double worst = RG_ScaledMoneyPer001(InpMaxLossPer001, volume);
+         if(100.0 * worst / basis > InpMaxRiskPercentPerTrade + 1e-9)
+           {
+            why = "pending would risk more than one trade is allowed to";
+            return true;
+           }
         }
      }
 
@@ -667,6 +831,11 @@ bool RG_PendingWouldBeIllegal(const string symbol, const double volume, string &
    if(RG_IsCooldownActive())
      {
       why = "revenge pause after a loss";
+      return true;
+     }
+   if(RG_IsNoTradeHoursActive())
+     {
+      why = "no-trade hours";
       return true;
      }
 
@@ -708,6 +877,11 @@ void RG_EnforcePendings()
       RG_DeleteManagedPendings("", "revenge pause after a loss");
       return;
      }
+   if(RG_IsNoTradeHoursActive())
+     {
+      RG_DeleteManagedPendings("", "no-trade hours");
+      return;
+     }
 
    for(int i = OrdersTotal() - 1; i >= 0; i--)
      {
@@ -722,8 +896,9 @@ void RG_EnforcePendings()
          continue;
 
       double volume = OrderGetDouble(ORDER_VOLUME_CURRENT);
+      long otype = OrderGetInteger(ORDER_TYPE);
       string why;
-      if(RG_PendingWouldBeIllegal(symbol, volume, why))
+      if(RG_PendingWouldBeIllegal(symbol, volume, otype, why))
          RG_DeletePending(ticket, why);
      }
 
@@ -778,6 +953,8 @@ void RG_EnforcePendings()
 //+------------------------------------------------------------------+
 void RG_EnforceTotalRisk()
   {
+   if(InpMaxTotalRiskPercent <= 0.0)
+      return;
    double basis = RG_RiskBasis();
    if(basis <= 0.0)
       return;
@@ -1024,7 +1201,13 @@ void RG_ProcessClosedDeal(const ulong deal)
    ulong pos_id = (ulong)HistoryDealGetInteger(deal, DEAL_POSITION_ID);
    if(entry != DEAL_ENTRY_INOUT && RG_PositionStillOpen(pos_id))
      {
-      RG_MarkDealSeen(deal); // partial close — unique deal, do not count
+      // On DEAL_ADD the position list can still show a ticket that just
+      // fully closed. Marking it seen here ate full losses as "partials"
+      // and never started the revenge pause. Wait until it has settled:
+      // still open after 2s → real partial; gone on harvest → full close.
+      if((int)(TimeTradeServer() - deal_time) < 2)
+         return;
+      RG_MarkDealSeen(deal);
       return;
      }
 
@@ -1075,6 +1258,14 @@ void RG_RefreshStatusReason()
       g_lastStatusReason = "day locked — no new risk";
       return;
      }
+   if(RG_IsNoTradeHoursActive())
+     {
+      string slot = RG_NoTradeActiveSlotLabel();
+      g_lastStatusReason = (StringLen(slot) > 0)
+                           ? ("no-trade hours " + slot)
+                           : "no-trade hours";
+      return;
+     }
    if(RG_IsCooldownActive())
      {
       g_lastStatusReason = "revenge pause after a loss";
@@ -1121,15 +1312,42 @@ void RG_GuardianSweep()
         }
      }
 
+   // 2b. No-trade hours — same flatten-until-flat as day lock, time-boxed
+   if(RG_IsNoTradeHoursActive())
+     {
+      if(!g_noTradeWasActive)
+        {
+         string slot = RG_NoTradeActiveSlotLabel();
+         RG_Notify((StringLen(slot) > 0)
+                   ? ("NO-TRADE HOURS — closing everything (" + slot + ")")
+                   : "NO-TRADE HOURS — closing everything");
+        }
+      g_noTradeWasActive = true;
+      bool flat = RG_FlattenAllManaged("no-trade hours — trade closed");
+      RG_DeleteManagedPendings("", "no-trade hours");
+      if(flat && RG_CountManaged() == 0)
+        {
+         RG_RefreshStatusReason();
+         return;
+        }
+     }
+   else
+      g_noTradeWasActive = false;
+
    // 3. Caps / cooldown-new / hedge / illegal adds — continuous
    RG_EnforcePositionCaps();
 
-   // 4. Lot cap first (does not need a stop), then SL/TP, then % risk
+   // 4. Per position: already-through-stop first (never plant a stop
+   //    behind the market), then lot cap (no stop needed), then SL/TP,
+   //    then % risk vs the SL that actually landed.
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       if(!RG_SelectManagedByIndex(i))
          continue;
       ulong ticket = g_pos.Ticket();
+      RG_EnforceHardMoneyStop(ticket);
+      if(!g_pos.SelectByTicket(ticket))
+         continue;
       RG_EnforceMaxLot(ticket);
       if(!g_pos.SelectByTicket(ticket))
          continue;
@@ -1150,12 +1368,6 @@ void RG_GuardianSweep()
       RG_EnforceBasketExit(symbols[s]);
 
    RG_RefreshStatusReason();
-  }
-
-//+------------------------------------------------------------------+
-void RG_EnforceAll()
-  {
-   RG_GuardianSweep();
   }
 
 #endif // RISKGUARD_ENFORCE_MQH

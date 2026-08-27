@@ -1,6 +1,6 @@
 # RiskGuard for MetaTrader 5
 
-**Version 1.23**
+**Version 1.28**
 
 You trade. RiskGuard enforces the rules.
 
@@ -15,12 +15,13 @@ It does **not** find entries.
 | Protection | In practice |
 |------------|-------------|
 | **Stop + target on every fill** | Placed from money per 0.01 lot (your account currency). This tick, not “in a few seconds”. |
-| **Lot and risk caps** | Max lot, max loss per 0.01, max % per trade and for all trades together. Shrink or close. If shrinking fails, close. |
-| **No hoping** | You cannot delete the stop or drag it past the worst-loss ceiling. |
+| **Lot and risk caps** | Max lot is cut **this tick** (does not wait for a stop): shrink, or close if shrinking fails. Then % of equity vs the stop that actually landed. |
+| **No hoping** | You cannot delete the stop. Dragging it past the worst-loss ceiling is pulled back when the broker allows — the trade is not closed just because gold will not take a 5-stop this second. If the quote is **already through** that 5, it market-closes instead of planting a wider stop. |
 | **Adding to losers** | Only when risk is already tiny (small lots, low %). Otherwise the extra is closed. |
 | **Combined tiny-profit exit** | Two or more trades close together when they are just green **after commission**. |
-| **Dead-trade timer** | A single scalp that is still not in profit after ~2 minutes (after costs) is cut. Hard max ~3 minutes. |
+| **Dead-trade timer** | A single scalp that is still not in profit after ~2 minutes (after costs) is cut. Hard max ~3 minutes unless it is already a real winner (exempt). |
 | **Day kill-switch** | Daily loss % and/or too many trades. Closes everything it is watching and keeps trying until they are gone. |
+| **No-trade hours** | You type hours in Berlin (or another clock). DST is handled. During those slots everything watched is closed. |
 | **Revenge pause** | After a full losing close, new fills and new pendings are blocked for a couple of minutes. |
 | **Pending killer** | Illegal pending orders are deleted **before** they become trades. (A market click cannot be blocked before fill.) |
 | **Honest panel** | **protecting** only if it can actually send orders. Otherwise **CANNOT TRADE** — it will not pretend. |
@@ -55,22 +56,23 @@ Step-by-step: [docs/INSTALL.md](docs/INSTALL.md)
 
 ## Quick start (~2,000 account)
 
-Open **Inputs**. Five groups, 27 settings, plain language. Most people only change:
+Open **Inputs**. Six groups, 28 settings, plain language. Most people only change:
 
 | Setting (as shown in Inputs) | Start with |
 |------------------------------|------------|
 | Biggest lot on ONE trade | `0.05` |
-| Worst loss allowed per 0.01 lot | `5.0` |
-| Normal stop: lose this much per 0.01 lot if hit | `3.0` |
+| Stop: lose this much per 0.01 lot if hit | `5.0` |
 | Take-profit: bank this much per 0.01 lot | `4.0` |
 | How many extras (0 = never add) | `2` |
 | Add only if EVERY open trade is this lot or smaller | `0.02` |
 | Your broker commission per 0.01 lot | **your** cost (example `0.04`) |
 | Lock the day if equity is down this % from this morning | `3.0` |
+| Clock for no-trade hours | Europe/Berlin |
+| Close EVERYTHING in these hours | `13:45-15:15,16:00-16:05` (empty = off) |
 
 Stops, pending kills, and “no hoping” are always on. Full dictionary: [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md)
 
-Upgrading from 1.11: **remove the EA from the chart and attach it again** so Inputs do not land on the wrong lines.
+Upgrading: from **1.11** re-attach (Inputs rebuilt in 1.20). From the **old split MQL5 folders**, copy this whole repo into `MQL5/Experts/` and delete the old split copies (1.22).
 
 ---
 
@@ -82,7 +84,7 @@ Upgrading from 1.11: **remove the EA from the chart and attach it again** so Inp
 | [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md) | Every Input, same wording as MT5 |
 | [docs/BEHAVIOR.md](docs/BEHAVIOR.md) | Exact runtime rules (the spec) |
 | [docs/INSTALL.md](docs/INSTALL.md) | Copy, compile, permissions, self-test |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.22 / 1.21 / 1.20 / … |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.28 / 1.27 / 1.26 / … |
 
 ---
 

@@ -1,12 +1,16 @@
-# Settings reference (RiskGuard 1.23)
+# Settings reference (RiskGuard 1.28)
 
 These names are **exactly** what you see in MetaTrader:
 
 **Right-click the chart → Expert list → Properties → Inputs.**
 
-There are **27** settings in **5 groups**. Everything else is built in (stop always on, pendings always watched, extras always same-direction, and so on). You still choose the **policy**. RiskGuard chooses the **mechanics**.
+There are **28** settings in **6 groups**. Everything else is built in (stop always on, pendings always watched, extras always same-direction, and so on). You still choose the **policy**. RiskGuard chooses the **mechanics**.
 
-**Upgrading from 1.11 or earlier:** remove the EA from the chart and attach it again. The Inputs list was rebuilt. Old saved values would land on the wrong lines.
+**Upgrading from 1.26:** group 6 was **appended**. Old saved values stay on the same lines.
+
+**Upgrading from 1.27 with an empty hours box:** 1.28’s default `13:45-15:15,16:00-16:05` does **not** overwrite a saved empty string. Type the slots or re-attach without saved Inputs.
+
+**Upgrading from 1.23 or earlier:** remove the EA from the chart and attach it again. 1.24 removed the extra stop Input. Old saved values would land on the wrong lines.
 
 ---
 
@@ -27,13 +31,14 @@ Defaults assume a roughly **2,000** account and **1-minute gold**.
 
 | What you see | Default | In one sentence |
 |--------------|---------|-----------------|
-| Biggest lot on ONE trade | `0.05` | Hard cap. Greedy size dies here. |
-| Worst loss allowed per 0.01 lot | `5.0` | Ceiling. A stop cannot sit farther than this. |
-| Normal stop: lose this much per 0.01 lot if hit | `3.0` | Breathing room. Must be ≤ the ceiling. |
+| Biggest lot on ONE trade | `0.05` | Hard cap. Bigger fills are shrunk this tick (no wait for a stop), or closed. |
+| Stop: lose this much per 0.01 lot if hit | `5.0` | **The** stop. Auto-placed, and you cannot drag it farther. If the broker will not take it yet, the trade stays with the tightest legal stop. |
 | Take-profit: bank this much per 0.01 lot | `4.0` | Where a single scalp is taken off. |
 | How many extras (0 = never add) | `2` | `0` turns adding off. |
 | Add only if EVERY open trade is this lot or smaller | `0.02` | Bigger than this already in? No add. |
 | Your broker commission per 0.01 lot | `0.04` | **Put your real cost here.** |
+| Clock for the hours below | Europe/Berlin | Type hours in Berlin time. DST is automatic. Server is converted. |
+| Close EVERYTHING in these hours | `13:45-15:15,16:00-16:05` | Empty = off. |
 
 Leave the rest until you know you need it.
 
@@ -56,12 +61,11 @@ This chart’s symbol is always included. There is no “watch the whole account
 
 | What you see | Default | Meaning |
 |--------------|---------|---------|
-| Biggest lot on ONE trade | `0.05` | A bigger fill is shrunk, or closed if it cannot be shrunk. |
-| Worst loss allowed per 0.01 lot (your money) | `5.0` | Hard ceiling. RiskGuard pulls the stop in to this. If the broker will not take that stop *yet* (gold min distance), it keeps the tightest legal stop and retries — it does not close the trade. |
-| Normal stop: lose this much per 0.01 lot if hit | `3.0` | The usual breath. |
+| Biggest lot on ONE trade | `0.05` | A bigger fill is shrunk **this tick**, even if the stop is not on yet. If shrinking fails, the trade is closed. |
+| Stop: lose this much per 0.01 lot if hit (your money) | `5.0` | Auto-stop **and** the farthest it may sit. Dragging it farther is pulled back. If gold’s min distance is wider for a moment, the tightest legal stop stays and we retry — we do not close the trade. |
 | Take-profit: bank this much per 0.01 lot | `4.0` | The usual bank. With 2+ trades open, per-trade targets are cleared so they exit together instead. |
-| One trade may not risk more than this % of the account | `1.0` | Size vs account. Uses **equity** (open P/L counts). |
-| All open trades together may not risk more than this % | `2.0` | If combined risk is too high, the **fattest** risk is closed first. |
+| Optional: one trade max % of equity (0 = off — lot and stop are enough) | `0` | Extra size cap vs account. **Leave 0** unless you want % to shrink lots. At 2,000 equity, stop 5 and lot 0.08 is already 2% — a 1% cap would cut the lot you typed. |
+| Optional: all trades together max % of equity (0 = off) | `0` | Extra combined cap. **Leave 0** unless you want it. |
 
 Stops and targets are always in **money per 0.01 lot**. There is no points / R-multiple mode — convert to money once and you are done.
 
@@ -77,16 +81,16 @@ Adds are allowed only when **all** of this is true:
 - the account can hold several trades on one symbol (hedging)
 - the day is not locked, and you are not in the revenge pause
 - every open trade is ≤ the add-on lot
-- open risk % is ≤ the add-on risk %
+- if add-on % is set, open risk % is ≤ that
 - you have not used up original + extras
 
-Otherwise the extra is closed (a pending extra is deleted). Buy+sell mix is always rejected.
+Otherwise the extra is closed (a pending extra is deleted). Buy+sell mix is always rejected (oldest trade keeps its direction). Opposite-direction pendings are deleted before they fill.
 
 | What you see | Default | Meaning |
 |--------------|---------|---------|
 | How many extras (0 = never add). Original + this many. | `2` | Cap is always **1 + extras**. |
 | Add only if EVERY open trade is this lot or smaller | `0.02` | |
-| Add only if open risk is this % of the account or less | `0.50` | |
+| Optional: add only if open risk ≤ this % (0 = off — add-on lot is enough) | `0` | Extra add gate vs account. Leave 0 unless you want it. |
 | Close all together at this tiny profit (your money, before commission) | `0.01` | Combined “just green”. |
 | Your broker commission per 0.01 lot | `0.04` | Folded into the combined target so a fake BE does not print a loss. |
 
@@ -109,8 +113,8 @@ Timers apply to a **single** trade. With 2+ trades, the timer is skipped — the
 | What you see | Default | Meaning |
 |--------------|---------|---------|
 | Close a single trade still not in profit after N seconds (0 = off) | `120` | Two 1-minute candles. |
-| Never hold a single trade longer than N seconds (0 = off) | `180` | Three 1-minute candles. |
-| Do not time-close if profit after costs is at least this | `0.50` | A real winner is left for the take-profit. |
+| Never hold a single trade longer than N seconds (0 = off) | `180` | Three 1-minute candles. **Skipped** if after-cost profit is already ≥ the exempt line below. |
+| Do not time-close if profit after costs is at least this | `0.50` | A real winner is left for the take-profit. This **also** skips the max-hold timer. |
 | Lock the day if equity is down this % from this morning (0 = off) | `3.0` | Includes open losses. Then everything watched is closed, and it keeps trying until they are gone. |
 | Lock the day after this many closed trades (0 = off) | `40` | Overtrading cap. |
 | After a loss, block NEW trades for N seconds (0 = off) | `120` | Existing trades stay. New fills and pendings die. Partials do not start this. |
@@ -135,15 +139,42 @@ Look (font, colors) is built in. It is not a settings job.
 
 ---
 
+## 6. No-trade hours
+
+Type hours in **your** clock. RiskGuard converts them to the broker server, including summer/winter time. Empty box = this protection is off.
+
+| What you see | Default | Meaning |
+|--------------|---------|---------|
+| Clock for the hours below | Europe/Berlin (CET/CEST — DST automatic) | **Berlin** if you sit in Berlin. Server clock = type the hours as the MT5 clock shows them. UTC / this PC / London / New York also there. |
+| Close EVERYTHING in these hours | `13:45-15:15,16:00-16:05` | Comma-separated slots. Both ends included (16:05 is still blocked). Overnight `22:00-02:00` is fine. Empty = off. |
+
+During a slot: every watched trade is closed (already open **and** new clicks), pendings are deleted, and it keeps trying until the clock leaves the slot.
+
+On attach, Experts prints something like:
+
+```text
+now Europe/Berlin 14:03:22  |  server 13:03:22  |  UTC 12:03:22
+server is 60 minute(s) behind Europe/Berlin
+  slot 13:45-15:15 Europe/Berlin  =  server 12:45-14:15
+  slot 16:00-16:05 Europe/Berlin  =  server 15:00-15:05
+```
+
+If that mapping is not “about 1 hour behind”, the clock dropdown is wrong for your broker — switch it, or pick **Broker server clock** and type the server hours instead.
+
+A bad string (e.g. `25:00-26:00`) refuses to start the EA. That is on purpose.
+
+---
+
 ## Always on (not in the dialog)
 
 This is the product. You do not turn these off:
 
-- Stop on every trade; put it back if you delete it; snap it if you widen it past the ceiling
+- Stop on every trade at your one stop number; put it back if you delete it; pull it back if you drag it farther; if gold refuses that distance this tick **and you are not yet through that money**, keep the tightest legal stop and retry (do not close the scalp for that)
+- If the trade is already at/through your stop money (gap, delayed stop), **close it** — never plant a stop behind the market
 - Target on a single trade; with 2+ trades, combined tiny-profit exit owns the exit
 - Illegal pending orders are deleted before they fill
 - Extra trades must be the same direction
-- Too-big lots: shrink, or close if shrinking fails
+- Too-big lots: shrink **immediately**, or close if shrinking fails
 - Day lock closes everything watched (when a day limit is set)
 - Equity is the % base (open P/L counts)
 - Checks every tick, plus every 1 second if the market is quiet
@@ -153,12 +184,12 @@ That is not less power. It is the guardian refusing to be talked into “just th
 
 ---
 
-## Quick math (2,000 account)
+## Quick math (2,000 account, stop 5.0 per 0.01)
 
-| Lot | Stop 3.0 / 0.01 | Worst 5.0 / 0.01 |
-|-----|-----------------|------------------|
-| 0.01 | ~3 | ~5 |
-| 0.02 | ~6 | ~10 |
-| 0.05 | ~15 | ~25 |
+| Lot | Money at the stop |
+|-----|-------------------|
+| 0.01 | ~5 |
+| 0.02 | ~10 |
+| 0.05 | ~25 |
 
 0.01–0.02 is “tiny risk” → adding may be allowed. 0.05 is already max lot → adding is blocked.

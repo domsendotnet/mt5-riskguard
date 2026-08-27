@@ -4,10 +4,10 @@
 //|  during liquid hours. Read PASS/FAIL in the Experts tab.        |
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
-#property version   "1.23"
+#property version   "1.28"
 #property strict
 #property script_show_confirm
-#property description "RiskGuard self-test: money math, tick rounding, volume, basket target."
+#property description "RiskGuard self-test: money math, tick rounding, volume, basket target, no-trade hours."
 
 #include "../Include/RiskGuard_Utils.mqh"
 
@@ -32,7 +32,7 @@ void RG_Expect(const bool cond, const string name, const string detail)
 //+------------------------------------------------------------------+
 void OnStart()
   {
-   Print("========== RiskGuard self-test 1.23 ==========");
+   Print("========== RiskGuard self-test 1.28 ==========");
    Print("Symbol ", _Symbol, "  digits ", (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS),
          "  tick ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE), 8),
          "  tick_value ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE), 8));
@@ -123,6 +123,50 @@ void OnStart()
                 "tiny volume does not round below min as a live lot",
                 DoubleToString(too_small, 8));
      }
+
+   RG_Expect(RG_DayOfWeekYMD(2026, 3, 29) == 0, "29 Mar 2026 is Sunday",
+             IntegerToString(RG_DayOfWeekYMD(2026, 3, 29)));
+   RG_Expect(RG_LastSundayDay(2026, 3) == 29, "last Sunday March 2026 = 29",
+             IntegerToString(RG_LastSundayDay(2026, 3)));
+   RG_Expect(RG_LastSundayDay(2026, 10) == 25, "last Sunday October 2026 = 25",
+             IntegerToString(RG_LastSundayDay(2026, 10)));
+   RG_Expect(RG_NthSundayDay(2026, 3, 2) == 8, "2nd Sunday March 2026 = 8",
+             IntegerToString(RG_NthSundayDay(2026, 3, 2)));
+   RG_Expect(RG_MinutesInSlot(14 * 60 + 3, 13 * 60 + 45, 15 * 60 + 15),
+             "14:03 inside 13:45-15:15", "");
+   RG_Expect(!RG_MinutesInSlot(13 * 60 + 44, 13 * 60 + 45, 15 * 60 + 15),
+             "13:44 outside 13:45-15:15", "");
+   RG_Expect(RG_MinutesInSlot(16 * 60 + 5, 16 * 60, 16 * 60 + 5),
+             "16:05 included in 16:00-16:05", "");
+   RG_Expect(RG_MinutesInSlot(23 * 60, 22 * 60, 2 * 60),
+             "23:00 inside wrapping 22:00-02:00", "");
+   RG_Expect(!RG_MinutesInSlot(12 * 60, 22 * 60, 2 * 60),
+             "12:00 outside wrapping 22:00-02:00", "");
+
+   int starts[], ends[], nslots;
+   string perr;
+   bool pok = RG_ParseNoTradeSlots("13:45-15:15, 16:00-16:05", starts, ends, nslots, perr);
+   bool parse_ok = (pok && nslots == 2);
+   if(parse_ok)
+      parse_ok = (starts[0] == 13 * 60 + 45 && ends[0] == 15 * 60 + 15 &&
+                  starts[1] == 16 * 60 && ends[1] == 16 * 60 + 5);
+   RG_Expect(parse_ok, "parse 13:45-15:15,16:00-16:05", perr);
+   pok = RG_ParseNoTradeSlots("", starts, ends, nslots, perr);
+   RG_Expect(pok && nslots == 0, "empty no-trade string is off", perr);
+   pok = RG_ParseNoTradeSlots("25:00-26:00", starts, ends, nslots, perr);
+   RG_Expect(!pok, "reject 25:00", pok ? "accepted" : perr);
+   RG_Expect(RG_FmtHm(13 * 60 + 45) == "13:45", "fmt 13:45", RG_FmtHm(13 * 60 + 45));
+
+   MqlDateTime gmt_now;
+   TimeToStruct(TimeGMT(), gmt_now);
+   bool eu_summer = RG_EuSummerGmt(TimeGMT());
+   if(gmt_now.mon >= 4 && gmt_now.mon <= 9)
+      RG_Expect(eu_summer, "EU summer in Apr-Sep", "DST flag false");
+   else
+      RG_Expect(true, "EU DST helper callable", eu_summer ? "summer" : "winter");
+   Print("INFO  clock Berlin now offset vs GMT ",
+         IntegerToString(RG_ClockGmtOffsetSec(RG_CLOCK_BERLIN, TimeGMT()) / 3600), "h  |  server vs GMT ",
+         IntegerToString((int)(TimeTradeServer() - TimeGMT()) / 3600), "h");
 
    string why;
    bool allowed = RG_TradingAllowed(why);

@@ -30,6 +30,7 @@ string   g_tradingBlockReason = "";
 
 string   g_lastNotifyMsg      = "";
 datetime g_lastNotifyTime     = 0;
+bool     g_noTradeWasActive   = false;
 
 #define RG_SEEN_DEALS 256
 ulong    g_seenDeals[RG_SEEN_DEALS];
@@ -684,9 +685,31 @@ double RG_PositionNetAfterCosts()
   }
 
 //+------------------------------------------------------------------+
+// Floor is RG_MAX_SLIPPAGE_POINTS. On a fast gold print, 30 points of
+// a 3-digit XAUUSD is 3 cents and closes get rejected — use 3× spread.
+//+------------------------------------------------------------------+
+int RG_DeviationPoints(const string symbol)
+  {
+   int dev = RG_MAX_SLIPPAGE_POINTS;
+   int spread = (int)SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+   if(spread > 0)
+     {
+      int by_spread = spread * 3;
+      if(by_spread > dev)
+         dev = by_spread;
+     }
+   if(dev > 5000)
+      dev = 5000;
+   return dev;
+  }
+
+//+------------------------------------------------------------------+
 void RG_PrepareTrade(const string symbol)
   {
-   g_trade.SetDeviationInPoints(RG_MAX_SLIPPAGE_POINTS);
+   int dev = RG_MAX_SLIPPAGE_POINTS;
+   if(StringLen(symbol) > 0)
+      dev = RG_DeviationPoints(symbol);
+   g_trade.SetDeviationInPoints(dev);
    g_trade.SetAsyncMode(false);
    if(!RG_EnsureSymbol(symbol))
      {
@@ -778,6 +801,438 @@ void RG_CollectManagedSymbols(string &symbols[])
          symbols[ns++] = s;
         }
      }
+  }
+
+//====================================================================
+// No-trade hours — clocks, DST, slot parse. Fail-closed on bad input.
+//====================================================================
+#define RG_MAX_NOTRADE_SLOTS 12
+const int RG_SAKAMOTO_T[12] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+
+//+------------------------------------------------------------------+
+int RG_DaysInMonth(const int year, const int month)
+  {
+   if(month == 2)
+     {
+      bool leap = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0));
+      return (leap ? 29 : 28);
+     }
+   if(month == 4 || month == 6 || month == 9 || month == 11)
+      return 30;
+   return 31;
+  }
+
+//+------------------------------------------------------------------+
+// Sakamoto. 0 = Sunday. Civil date, timezone-free.
+//+------------------------------------------------------------------+
+int RG_DayOfWeekYMD(int year, int month, const int day)
+  {
+   if(month < 3)
+      year--;
+   return (year + year / 4 - year / 100 + year / 400 + RG_SAKAMOTO_T[month - 1] + day) % 7;
+  }
+
+//+------------------------------------------------------------------+
+int RG_LastSundayDay(const int year, const int month)
+  {
+   int dim = RG_DaysInMonth(year, month);
+   int dow = RG_DayOfWeekYMD(year, month, dim); // 0=Sun
+   return (dim - dow);
+  }
+
+//+------------------------------------------------------------------+
+int RG_NthSundayDay(const int year, const int month, const int n)
+  {
+   int dow1 = RG_DayOfWeekYMD(year, month, 1);
+   int first_sun = (dow1 == 0) ? 1 : (8 - dow1);
+   return first_sun + (n - 1) * 7;
+  }
+
+//+------------------------------------------------------------------+
+// EU DST: last Sunday of March 01:00 UTC → last Sunday of October 01:00 UTC.
+// gmt is a TimeGMT()-style datetime (TimeToStruct shows UTC wall).
+//+------------------------------------------------------------------+
+bool RG_EuSummerGmt(const datetime gmt)
+  {
+   MqlDateTime g;
+   TimeToStruct(gmt, g);
+   int start_day = RG_LastSundayDay(g.year, 3);
+   int end_day = RG_LastSundayDay(g.year, 10);
+   if(g.mon < 3 || g.mon > 10)
+      return false;
+   if(g.mon > 3 && g.mon < 10)
+      return true;
+   if(g.mon == 3)
+     {
+      if(g.day > start_day)
+         return true;
+      if(g.day < start_day)
+         return false;
+      return (g.hour >= 1);
+     }
+   if(g.day < end_day)
+      return true;
+   if(g.day > end_day)
+      return false;
+   return (g.hour < 1);
+  }
+
+//+------------------------------------------------------------------+
+// US DST (2007+): 2nd Sunday of March 07:00 UTC → 1st Sunday of November 06:00 UTC.
+//+------------------------------------------------------------------+
+bool RG_UsSummerGmt(const datetime gmt)
+  {
+   MqlDateTime g;
+   TimeToStruct(gmt, g);
+   int start_day = RG_NthSundayDay(g.year, 3, 2);
+   int end_day = RG_NthSundayDay(g.year, 11, 1);
+   if(g.mon < 3 || g.mon > 11)
+      return false;
+   if(g.mon > 3 && g.mon < 11)
+      return true;
+   if(g.mon == 3)
+     {
+      if(g.day > start_day)
+         return true;
+      if(g.day < start_day)
+         return false;
+      return (g.hour >= 7);
+     }
+   if(g.day < end_day)
+      return true;
+   if(g.day > end_day)
+      return false;
+   return (g.hour < 6);
+  }
+
+//+------------------------------------------------------------------+
+int RG_ClockGmtOffsetSec(const ENUM_RG_CLOCK clock, const datetime gmt)
+  {
+   if(clock == RG_CLOCK_UTC)
+      return 0;
+   if(clock == RG_CLOCK_SERVER)
+      return (int)(TimeTradeServer() - TimeGMT());
+   if(clock == RG_CLOCK_LOCAL)
+      return (int)(TimeLocal() - TimeGMT());
+   if(clock == RG_CLOCK_BERLIN)
+      return (RG_EuSummerGmt(gmt) ? 7200 : 3600);
+   if(clock == RG_CLOCK_LONDON)
+      return (RG_EuSummerGmt(gmt) ? 3600 : 0);
+   if(clock == RG_CLOCK_NEWYORK)
+      return (RG_UsSummerGmt(gmt) ? -14400 : -18000);
+   return 0;
+  }
+
+//+------------------------------------------------------------------+
+datetime RG_NowInClock(const ENUM_RG_CLOCK clock)
+  {
+   if(clock == RG_CLOCK_SERVER)
+      return TimeTradeServer();
+   if(clock == RG_CLOCK_LOCAL)
+      return TimeLocal();
+   if(clock == RG_CLOCK_UTC)
+      return TimeGMT();
+   datetime gmt = TimeGMT();
+   return (gmt + RG_ClockGmtOffsetSec(clock, gmt));
+  }
+
+//+------------------------------------------------------------------+
+string RG_ClockName(const ENUM_RG_CLOCK clock)
+  {
+   if(clock == RG_CLOCK_BERLIN)
+      return "Europe/Berlin";
+   if(clock == RG_CLOCK_SERVER)
+      return "server";
+   if(clock == RG_CLOCK_UTC)
+      return "UTC";
+   if(clock == RG_CLOCK_LOCAL)
+      return "this PC";
+   if(clock == RG_CLOCK_LONDON)
+      return "Europe/London";
+   if(clock == RG_CLOCK_NEWYORK)
+      return "America/New York";
+   return "clock";
+  }
+
+//+------------------------------------------------------------------+
+string RG_FmtHm(const int minutes_from_midnight)
+  {
+   int m = minutes_from_midnight % 1440;
+   if(m < 0)
+      m += 1440;
+   return StringFormat("%02d:%02d", m / 60, m % 60);
+  }
+
+//+------------------------------------------------------------------+
+int RG_NowMinutesInClock(const ENUM_RG_CLOCK clock)
+  {
+   MqlDateTime dt;
+   TimeToStruct(RG_NowInClock(clock), dt);
+   return (dt.hour * 60 + dt.min);
+  }
+
+//+------------------------------------------------------------------+
+// Server wall minus selected clock wall, in seconds. Negative = server behind.
+//+------------------------------------------------------------------+
+int RG_ServerMinusClockSec(const ENUM_RG_CLOCK clock)
+  {
+   return (int)(TimeTradeServer() - RG_NowInClock(clock));
+  }
+
+//+------------------------------------------------------------------+
+string RG_TrimCopy(string s)
+  {
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   return s;
+  }
+
+//+------------------------------------------------------------------+
+bool RG_ParseHhMm(const string raw, int &out_min, string &err)
+  {
+   out_min = 0;
+   err = "";
+   string s = RG_TrimCopy(raw);
+   int colon = StringFind(s, ":");
+   if(colon <= 0 || colon >= StringLen(s) - 1)
+     {
+      err = "'" + s + "' is not HH:MM";
+      return false;
+     }
+   int h = (int)StringToInteger(StringSubstr(s, 0, colon));
+   int mi = (int)StringToInteger(StringSubstr(s, colon + 1));
+   if(h < 0 || h > 23 || mi < 0 || mi > 59)
+     {
+      err = "'" + s + "' hour/minute out of range";
+      return false;
+     }
+   // reject junk like 13:45foo
+   string rebuilt = StringFormat("%d:%02d", h, mi);
+   string rebuilt2 = StringFormat("%02d:%02d", h, mi);
+   if(s != rebuilt && s != rebuilt2)
+     {
+      err = "'" + s + "' is not HH:MM";
+      return false;
+     }
+   out_min = h * 60 + mi;
+   return true;
+  }
+
+//+------------------------------------------------------------------+
+bool RG_MinutesInSlot(const int now_min, const int start_min, const int end_min)
+  {
+   if(start_min <= end_min)
+      return (now_min >= start_min && now_min <= end_min);
+   return (now_min >= start_min || now_min <= end_min);
+  }
+
+//+------------------------------------------------------------------+
+bool RG_ParseNoTradeSlots(const string raw, int &starts[], int &ends[], int &n, string &err)
+  {
+   n = 0;
+   err = "";
+   ArrayResize(starts, 0);
+   ArrayResize(ends, 0);
+   string s = raw;
+   StringReplace(s, " ", "");
+   StringReplace(s, "\t", "");
+   StringReplace(s, "\r", "");
+   StringReplace(s, "\n", "");
+   StringReplace(s, "–", "-");
+   StringReplace(s, "—", "-");
+   StringReplace(s, ";", ",");
+   if(StringLen(s) == 0)
+      return true;
+
+   string parts[];
+   int np = StringSplit(s, ',', parts);
+   if(np <= 0)
+     {
+      err = "could not read no-trade hours";
+      return false;
+     }
+   if(np > RG_MAX_NOTRADE_SLOTS)
+     {
+      err = StringFormat("too many no-trade slots (max %d)", RG_MAX_NOTRADE_SLOTS);
+      return false;
+     }
+
+   for(int i = 0; i < np; i++)
+     {
+      if(StringLen(parts[i]) == 0)
+         continue;
+      int dash = StringFind(parts[i], "-");
+      if(dash <= 0 || dash >= StringLen(parts[i]) - 1)
+        {
+         err = "each slot must look like 13:45-15:15 (got " + parts[i] + ")";
+         return false;
+        }
+      int a = 0;
+      int b = 0;
+      string e1, e2;
+      if(!RG_ParseHhMm(StringSubstr(parts[i], 0, dash), a, e1))
+        {
+         err = e1;
+         return false;
+        }
+      if(!RG_ParseHhMm(StringSubstr(parts[i], dash + 1), b, e2))
+        {
+         err = e2;
+         return false;
+        }
+      ArrayResize(starts, n + 1);
+      ArrayResize(ends, n + 1);
+      starts[n] = a;
+      ends[n] = b;
+      n++;
+     }
+   if(n == 0)
+     {
+      err = "no-trade hours is not empty but no slots were read";
+      return false;
+     }
+   return true;
+  }
+
+//+------------------------------------------------------------------+
+bool RG_NoTradeHoursValidate(string &err)
+  {
+   err = "";
+   if(!RG_PolicyNoTradeHoursOn())
+      return true;
+   int starts[], ends[], n;
+   return RG_ParseNoTradeSlots(InpNoTradeHours, starts, ends, n, err);
+  }
+
+//+------------------------------------------------------------------+
+bool RG_IsNoTradeHoursActive()
+  {
+   if(!RG_PolicyNoTradeHoursOn())
+      return false;
+   int starts[], ends[], n;
+   string err;
+   if(!RG_ParseNoTradeSlots(InpNoTradeHours, starts, ends, n, err) || n <= 0)
+      return true; // hours are set but unreadable — block rather than trade
+   int nowm = RG_NowMinutesInClock(InpNoTradeClock);
+   for(int i = 0; i < n; i++)
+      if(RG_MinutesInSlot(nowm, starts[i], ends[i]))
+         return true;
+   return false;
+  }
+
+//+------------------------------------------------------------------+
+string RG_NoTradeActiveSlotLabel()
+  {
+   int starts[], ends[], n;
+   string err;
+   if(!RG_ParseNoTradeSlots(InpNoTradeHours, starts, ends, n, err) || n <= 0)
+      return "";
+   int nowm = RG_NowMinutesInClock(InpNoTradeClock);
+   int delta_min = (int)MathRound((double)RG_ServerMinusClockSec(InpNoTradeClock) / 60.0);
+   for(int i = 0; i < n; i++)
+      if(RG_MinutesInSlot(nowm, starts[i], ends[i]))
+        {
+         string zone = StringFormat("%s-%s %s",
+                                    RG_FmtHm(starts[i]), RG_FmtHm(ends[i]),
+                                    RG_ClockName(InpNoTradeClock));
+         if(InpNoTradeClock == RG_CLOCK_SERVER)
+            return zone;
+         return zone + StringFormat(" (server %s-%s)",
+                                    RG_FmtHm(starts[i] + delta_min),
+                                    RG_FmtHm(ends[i] + delta_min));
+        }
+   return "";
+  }
+
+//+------------------------------------------------------------------+
+string RG_NoTradeHoursPanelLine()
+  {
+   int starts[], ends[], n;
+   string err;
+   if(!RG_ParseNoTradeSlots(InpNoTradeHours, starts, ends, n, err) || n <= 0)
+      return "";
+   string slots = "";
+   for(int i = 0; i < n; i++)
+     {
+      if(i > 0)
+         slots += ", ";
+      slots += RG_FmtHm(starts[i]) + "-" + RG_FmtHm(ends[i]);
+     }
+   MqlDateTime z, sv;
+   TimeToStruct(RG_NowInClock(InpNoTradeClock), z);
+   TimeToStruct(TimeTradeServer(), sv);
+   string nowz = StringFormat("%02d:%02d", z.hour, z.min);
+   string nows = StringFormat("%02d:%02d", sv.hour, sv.min);
+   if(InpNoTradeClock == RG_CLOCK_SERVER)
+      return StringFormat("No-trade %s  now %s server", slots, nows);
+   return StringFormat("No-trade %s %s  now %s = server %s",
+                       slots, RG_ClockName(InpNoTradeClock), nowz, nows);
+  }
+
+//+------------------------------------------------------------------+
+void RG_LogNoTradeHoursMapping()
+  {
+   if(!RG_PolicyNoTradeHoursOn())
+     {
+      RG_Log(1, "no-trade hours off (box empty)");
+      return;
+     }
+   string err;
+   int starts[], ends[], n;
+   if(!RG_ParseNoTradeSlots(InpNoTradeHours, starts, ends, n, err))
+     {
+      RG_Log(0, "no-trade hours invalid: " + err);
+      return;
+     }
+
+   datetime gmt = TimeGMT();
+   int delta = RG_ServerMinusClockSec(InpNoTradeClock);
+   int behind_m = (int)MathRound(MathAbs((double)delta) / 60.0);
+
+   MqlDateTime z, sv, u;
+   TimeToStruct(RG_NowInClock(InpNoTradeClock), z);
+   TimeToStruct(TimeTradeServer(), sv);
+   TimeToStruct(gmt, u);
+
+   string dst = "";
+   if(InpNoTradeClock == RG_CLOCK_BERLIN)
+      dst = RG_EuSummerGmt(gmt) ? " (CEST, UTC+2, summer)" : " (CET, UTC+1, winter)";
+   else if(InpNoTradeClock == RG_CLOCK_LONDON)
+      dst = RG_EuSummerGmt(gmt) ? " (BST, UTC+1, summer)" : " (GMT, winter)";
+   else if(InpNoTradeClock == RG_CLOCK_NEWYORK)
+      dst = RG_UsSummerGmt(gmt) ? " (EDT, UTC-4, summer)" : " (EST, UTC-5, winter)";
+
+   RG_Log(1, "no-trade clock " + RG_ClockName(InpNoTradeClock) + dst);
+   RG_Log(1, StringFormat("now %s %02d:%02d:%02d  |  server %02d:%02d:%02d  |  UTC %02d:%02d:%02d",
+                          RG_ClockName(InpNoTradeClock), z.hour, z.min, z.sec,
+                          sv.hour, sv.min, sv.sec,
+                          u.hour, u.min, u.sec));
+
+   if(InpNoTradeClock != RG_CLOCK_SERVER)
+     {
+      if(delta == 0)
+         RG_Log(1, "server clock matches " + RG_ClockName(InpNoTradeClock));
+      else if(delta < 0)
+         RG_Log(1, StringFormat("server is %d minute(s) behind %s",
+                                behind_m, RG_ClockName(InpNoTradeClock)));
+      else
+         RG_Log(1, StringFormat("server is %d minute(s) ahead of %s",
+                                behind_m, RG_ClockName(InpNoTradeClock)));
+     }
+
+   int delta_min = (int)MathRound((double)delta / 60.0);
+   for(int i = 0; i < n; i++)
+     {
+      string line = StringFormat("  slot %s-%s %s",
+                                 RG_FmtHm(starts[i]), RG_FmtHm(ends[i]),
+                                 RG_ClockName(InpNoTradeClock));
+      if(InpNoTradeClock != RG_CLOCK_SERVER)
+         line += StringFormat("  =  server %s-%s",
+                              RG_FmtHm(starts[i] + delta_min),
+                              RG_FmtHm(ends[i] + delta_min));
+      RG_Log(1, line);
+     }
+   RG_Log(1, "during a slot: every watched trade is closed, new fills are closed, pendings are deleted");
   }
 
 #endif // RISKGUARD_UTILS_MQH
