@@ -1,4 +1,4 @@
-# Behavior specification (RiskGuard 1.22)
+# Behavior specification (RiskGuard 1.23)
 
 This is the **engineer’s spec** — exact runtime rules. If you are using the EA, start with [USER_GUIDE.md](USER_GUIDE.md) and [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). Those use the same words as the Inputs dialog.
 
@@ -87,10 +87,11 @@ Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fail
 
 ## Size / risk caps
 
-Evaluated **after** SL exists, on the actual SL money:
+**Lot cap is first and does not wait for a stop.** If volume > MaxLot → shrink to MaxLot, or close if shrinking fails.
 
-- lot > MaxLot
-- risk % of equity/balance > per-trade cap
+Then, **after** SL exists, on the actual SL money:
+
+- risk % of equity > per-trade cap
 
 Action: reduce to a legal lot, or close. **If reduce/partial close fails → full close.** Never leave an oversized position because the broker rejected a partial.
 

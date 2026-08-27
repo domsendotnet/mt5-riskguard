@@ -1,4 +1,4 @@
-# Install & compile (RiskGuard 1.22)
+# Install & compile (RiskGuard 1.23)
 
 Everything you need sits in **one folder**: the EA, `Include/`, `Scripts/`, and `docs/`. Do not split them into MT5’s global Include/Scripts trees.
 
@@ -52,7 +52,7 @@ Chart box: `RISKGUARD · XAUUSD`. Status line should contain **protecting**.
 Experts log:
 
 ```text
-RiskGuard| RiskGuard 1.22 started on XAUUSD
+RiskGuard| RiskGuard 1.23 started on XAUUSD
 ```
 
 If the box says **CANNOT TRADE**, you are not protected. Typical causes:

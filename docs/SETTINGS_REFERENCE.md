@@ -1,4 +1,4 @@
-# Settings reference (RiskGuard 1.22)
+# Settings reference (RiskGuard 1.23)
 
 These names are **exactly** what you see in MetaTrader:
 

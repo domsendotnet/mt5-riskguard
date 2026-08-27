@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.23 — 2026-08-27
+
+Max lot is enforced immediately, even if the stop is not on yet.
+
+- A 0.09 fill with max lot 0.08 was kept because size checks waited for SL; we still put SL/TP on it and skipped the cap.
+- Lot cap now runs first: shrink to max, or close if shrinking fails. Retries every tick.
+
 ## 1.22 — 2026-08-27
 
 Install as one folder. No more copying Include/Scripts into MT5’s global trees.

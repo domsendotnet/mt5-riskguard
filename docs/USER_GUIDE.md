@@ -1,4 +1,4 @@
-# User guide (RiskGuard 1.22)
+# User guide (RiskGuard 1.23)
 
 You click. RiskGuard watches. If the account is in a state your emotions would like and your math cannot afford, it **fixes it or kills it**. It keeps trying until the account is legal.
 
@@ -86,7 +86,7 @@ If it is not allowed (lot too big, risk % too high, day locked, revenge pause, n
 | Open with no stop / no target | Puts them on, this tick |
 | Delete the stop | Puts it back. Still missing after 3 seconds → closes |
 | Drag the stop farther (more loss) | Pulls it back toward the worst-loss ceiling. If the broker cannot take that stop *yet*, it keeps the tightest legal stop and retries — it does not close for that |
-| Open 0.10 when max lot is 0.05 | Shrinks or closes. If shrinking fails, closes |
+| Open 0.09 when max lot is 0.08 | Shrinks to 0.08 this tick (does not wait for a stop). If shrinking fails, closes |
 | Place a 0.10 pending | Deletes the pending |
 | Add to a 0.05 loser | Extra is closed (and stays closed on the next ticks) |
 | Revenge-click 10 seconds after a loss | New trade closed; new pending deleted |

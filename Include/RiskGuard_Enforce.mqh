@@ -420,10 +420,37 @@ double RG_MaxAllowedLotForRisk(const string symbol, const ENUM_ORDER_TYPE otype,
   }
 
 //+------------------------------------------------------------------+
+void RG_EnforceMaxLot(const ulong ticket)
+  {
+   if(!g_pos.SelectByTicket(ticket))
+      return;
+   string symbol = g_pos.Symbol();
+   double lots = g_pos.Volume();
+   if(lots <= InpMaxLot + 1e-8)
+      return;
+
+   double cap = RG_NormalizeVolume(symbol, InpMaxLot);
+   if(cap <= 0.0 || cap >= lots - 1e-8)
+     {
+      RG_ClosePositionTicket(ticket, StringFormat("lot %.2f over max %.2f — closed", lots, InpMaxLot));
+      return;
+     }
+   if(!RG_ReducePositionTo(ticket, cap, StringFormat("lot %.2f over max %.2f", lots, InpMaxLot)))
+      RG_ClosePositionTicket(ticket, StringFormat("lot %.2f over max %.2f — could not shrink, closed", lots, InpMaxLot));
+  }
+
+//+------------------------------------------------------------------+
 void RG_EnforceSize(const ulong ticket)
   {
    if(!g_pos.SelectByTicket(ticket))
       return;
+
+   // Lot cap does not need a stop. Waiting for SL was why a 0.09 could
+   // sit under a 0.08 max — we put SL/TP on it and skipped size.
+   RG_EnforceMaxLot(ticket);
+   if(!g_pos.SelectByTicket(ticket))
+      return;
+
    string symbol = g_pos.Symbol();
    double lots = g_pos.Volume();
    double open_price = g_pos.PriceOpen();
@@ -432,7 +459,7 @@ void RG_EnforceSize(const ulong ticket)
 
    double sl = g_pos.StopLoss();
    if(sl <= 0.0)
-      return; // wait for SL; naked timeout owns the fail-closed path
+      return; // % risk still needs an SL; lot cap already ran
 
    double dist = MathAbs(open_price - sl);
    double risk = 0.0;
@@ -1097,12 +1124,15 @@ void RG_GuardianSweep()
    // 3. Caps / cooldown-new / hedge / illegal adds — continuous
    RG_EnforcePositionCaps();
 
-   // 4. Per-position SL/TP then size (size uses the SL that actually landed)
+   // 4. Lot cap first (does not need a stop), then SL/TP, then % risk
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       if(!RG_SelectManagedByIndex(i))
          continue;
       ulong ticket = g_pos.Ticket();
+      RG_EnforceMaxLot(ticket);
+      if(!g_pos.SelectByTicket(ticket))
+         continue;
       if(!RG_ApplyAutoSLTP(ticket))
          continue;
       if(!g_pos.SelectByTicket(ticket))

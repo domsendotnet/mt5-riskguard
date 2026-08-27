@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.22"
+#property version   "1.23"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
 #property description "tiny-profit basket exit, dead-trade timer, and a day kill-switch."
@@ -96,7 +96,7 @@ int OnInit()
    RG_GuardianSweep();
    RG_PanelUpdate();
 
-   RG_Log(1, "RiskGuard 1.22 started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.23 started on " + _Symbol);
    return INIT_SUCCEEDED;
   }
 

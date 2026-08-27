@@ -1,6 +1,6 @@
 # RiskGuard for MetaTrader 5
 
-**Version 1.22**
+**Version 1.23**
 
 You trade. RiskGuard enforces the rules.
 
