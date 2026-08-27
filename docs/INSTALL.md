@@ -1,4 +1,4 @@
-# Install & compile (RiskGuard 1.11)
+# Install & compile (RiskGuard 1.20)
 
 ## 1. Open the MetaTrader data folder
 
@@ -30,9 +30,9 @@ If you see `cannot open include file`, the `Include/RiskGuard` folder is in the 
 
 1. Navigator → **Expert Advisors** → drag **RiskGuard** onto **XAUUSD M1** (or your symbol).
 2. **Common** tab: tick **Allow Algo Trading**.
-3. **Inputs** tab: groups are numbered **1. Start here** … **10. Pending orders**.  
-   Labels are full sentences. If you are new, change only the “how much you can lose” and stop/target money-per-0.01 numbers, plus **your** commission.  
-   Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)
+3. **Inputs** tab: five groups, 27 settings, full-sentence labels.  
+   If you are new, change lot / stop / target / commission. Dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md)  
+   **Upgrading from 1.11 or earlier:** remove the EA from the chart, then attach it again. The Inputs list was rebuilt; old saved values would stick to the wrong lines.
 4. OK. Toolbar **Algo Trading** must be **green**.
 
 ## 5. Confirm it is alive
@@ -42,7 +42,7 @@ Chart box: `RISKGUARD · XAUUSD`. Status line should contain **protecting**.
 Experts log:
 
 ```text
-RiskGuard| RiskGuard 1.11 started on XAUUSD
+RiskGuard| RiskGuard 1.20 started on XAUUSD
 ```
 
 If the box says **CANNOT TRADE**, you are not protected. Typical causes:
@@ -68,6 +68,6 @@ Optional: Navigator → **Scripts → RiskGuard_SelfTest** on XAUUSD **during li
 
 Replace the `.mq5` / `.mqh` files, recompile, remove the EA from the chart, attach again.
 
-**Do not reorder or delete Inputs** in the source. Two unused settings are left in place on purpose so your saved values do not shift onto the wrong line (that would silently change your max lot).
+1.20 rebuilt the Inputs list (70-odd knobs down to 27). After this upgrade, always **re-attach** so values do not shift onto the wrong line.
 
 Day lock and today’s trade count survive a reload (stored in the terminal for this account).

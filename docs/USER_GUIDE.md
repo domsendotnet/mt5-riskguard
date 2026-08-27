@@ -1,4 +1,4 @@
-# User guide (RiskGuard 1.11)
+# User guide (RiskGuard 1.20)
 
 You click. RiskGuard watches. If the account is in a state your emotions would like and your math cannot afford, it **fixes it or kills it**. It keeps trying until the account is legal.
 
@@ -11,7 +11,7 @@ It does **not** find entries. It is not a strategy. It is a guardian.
 1. Install and compile ([INSTALL.md](INSTALL.md)).
 2. Attach **RiskGuard** to XAUUSD, **M1**.
 3. Common tab: tick **Allow Algo Trading**.
-4. Inputs: read group **1. Start here**. Leave defaults unless you know better. Put your real commission in group **5**.
+4. Inputs: five groups. Leave defaults unless you know better. Put **your** commission in group **3**. If you are upgrading from 1.11, remove the EA and attach it again (the Inputs list was rebuilt).
 5. Toolbar **Algo Trading** = green.
 6. The chart box must say **protecting**, not **CANNOT TRADE**.
 7. On demo, open a tiny trade **with no stop**. A stop and a target should appear on the **next tick**.
@@ -65,6 +65,8 @@ That is “losers that run too long” without cutting everything in two seconds
 
 Only when risk is **actually** small. On a ~2,000 account that means lots like **0.01 or 0.02**, not 0.05.
 
+Set **How many extras** to `0` if you never want this.
+
 If it is allowed:
 
 - you may add 1–2 extras, same direction
@@ -97,7 +99,7 @@ MetaTrader **cannot** block a market click before fill. Fastest legal reaction i
 
 ## Settings you should actually open
 
-Full dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). The labels there match the Inputs tab.
+27 settings, 5 groups. Full dictionary: [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). The labels match the Inputs tab.
 
 Most people only set:
 
@@ -105,11 +107,12 @@ Most people only set:
 2. Worst loss per 0.01
 3. Normal stop per 0.01
 4. Take-profit per 0.01
-5. Add-on lot / add-on risk %
-6. **Your** commission per 0.01
-7. Day-loss %
+5. How many extras (`0` = never add)
+6. Add-on lot
+7. **Your** commission per 0.01
+8. Day-loss %
 
-Leave the rest.
+Stops, pending-order kills, “same direction only”, shrink-or-close, and day-lock flatten are **always on**. That is the guardian, not a menu.
 
 ---
 

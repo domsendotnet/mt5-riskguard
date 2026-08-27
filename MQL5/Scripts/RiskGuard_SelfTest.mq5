@@ -4,7 +4,7 @@
 //|  during liquid hours. Read PASS/FAIL in the Experts tab.        |
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
-#property version   "1.11"
+#property version   "1.20"
 #property strict
 #property script_show_confirm
 #property description "RiskGuard self-test: money math, tick rounding, volume, basket target."
@@ -32,7 +32,7 @@ void RG_Expect(const bool cond, const string name, const string detail)
 //+------------------------------------------------------------------+
 void OnStart()
   {
-   Print("========== RiskGuard self-test 1.11 ==========");
+   Print("========== RiskGuard self-test 1.20 ==========");
    Print("Symbol ", _Symbol, "  digits ", (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS),
          "  tick ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE), 8),
          "  tick_value ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE), 8));
@@ -47,7 +47,7 @@ void OnStart()
    RG_Expect(MathAbs(RG_CommissionForLots(0.01) - InpCommissionPer001) < 1e-9,
              "commission 0.01", DoubleToString(RG_CommissionForLots(0.01), 4));
    double tgt = RG_ExitTargetForLots(0.02);
-   double expect_tgt = InpBasketMinProfit + InpCommissionPer001 * 2.0 + InpBasketExtraBuffer;
+   double expect_tgt = InpBasketMinProfit + InpCommissionPer001 * 2.0;
    RG_Expect(MathAbs(tgt - expect_tgt) < 1e-9,
              "basket target two 0.01 lots",
              StringFormat("got %.4f expected %.4f", tgt, expect_tgt));

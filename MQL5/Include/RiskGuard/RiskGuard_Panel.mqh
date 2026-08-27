@@ -33,10 +33,10 @@ void RG_PanelSetLabel(const string id, const int line, const string text, const 
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
      }
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, InpPanelX + 10);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpPanelY + 10 + line * (InpPanelFontSize + 6));
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, InpPanelY + 10 + line * (RG_PANEL_FONT_SIZE + 6));
    ObjectSetString(0, name, OBJPROP_TEXT, text);
-   ObjectSetString(0, name, OBJPROP_FONT, InpPanelFont);
-   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, InpPanelFontSize);
+   ObjectSetString(0, name, OBJPROP_FONT, RG_PANEL_FONT);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, RG_PANEL_FONT_SIZE);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
   }
 
@@ -45,19 +45,14 @@ void RG_PanelSetBackground(const int lines)
   {
    string name = RG_PANEL_PREFIX + "BG";
    int width = 430;
-   int height = 20 + lines * (InpPanelFontSize + 6) + 10;
-   if(!InpPanelShowBackground)
-     {
-      ObjectDelete(0, name);
-      return;
-     }
+   int height = 20 + lines * (RG_PANEL_FONT_SIZE + 6) + 10;
    if(ObjectFind(0, name) < 0)
      {
       ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_CORNER, InpPanelCorner);
-      ObjectSetInteger(0, name, OBJPROP_BGCOLOR, InpPanelBgColor);
+      ObjectSetInteger(0, name, OBJPROP_BGCOLOR, RG_PANEL_BG_COLOR);
       ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-      ObjectSetInteger(0, name, OBJPROP_COLOR, InpPanelAccentColor);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, RG_PANEL_ACCENT_COLOR);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
@@ -88,29 +83,29 @@ void RG_PanelUpdate()
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    double day_pnl = equity - g_dayStartEquity;
    double basis = RG_RiskBasis();
-   double open_risk = RG_TotalOpenRiskMoney(InpChartSymbolOnly ? _Symbol : "");
+   double open_risk = RG_TotalOpenRiskMoney(_Symbol);
    double risk_pct = (basis > 0.0) ? (100.0 * open_risk / basis) : 0.0;
-   int open_n = RG_CountManaged(InpChartSymbolOnly ? _Symbol : "");
+   int open_n = RG_CountManaged(_Symbol);
    int cap = RG_AllowedMaxPositions(_Symbol);
    int shown_cap = cap;
    if(g_dayLocked || RG_IsCooldownActive())
       shown_cap = open_n; // cannot add
-   int pend_n = RG_CountManagedPendings(InpChartSymbolOnly ? _Symbol : "");
+   int pend_n = RG_CountManagedPendings(_Symbol);
    double basket_net = RG_BasketNetProfit(_Symbol);
    double basket_tgt = RG_BasketExitTarget(_Symbol);
 
    string avg_reason;
    bool avg = RG_AveragingPrivilegeOK(_Symbol, avg_reason, false);
 
-   color status_clr = InpPanelAccentColor;
+   color status_clr = RG_PANEL_ACCENT_COLOR;
    if(!g_tradingOk)
-      status_clr = InpPanelDangerColor;
+      status_clr = RG_PANEL_DANGER_COLOR;
    else if(g_dayLocked)
-      status_clr = InpPanelDangerColor;
+      status_clr = RG_PANEL_DANGER_COLOR;
    else if(RG_IsCooldownActive())
-      status_clr = InpPanelWarnColor;
+      status_clr = RG_PANEL_WARN_COLOR;
    else if(!InpEnableGuard)
-      status_clr = InpPanelWarnColor;
+      status_clr = RG_PANEL_WARN_COLOR;
 
    string mode;
    if(!InpEnableGuard)
@@ -130,28 +125,28 @@ void RG_PanelUpdate()
    RG_PanelSetBackground(11);
    RG_PanelSetLabel("h", line++, "RISKGUARD  ·  " + _Symbol, status_clr);
    RG_PanelSetLabel("e", line++, StringFormat("Account %s   Today P/L %+.2f",
-                    RG_FmtMoney(equity), day_pnl), InpPanelTextColor);
+                    RG_FmtMoney(equity), day_pnl), RG_PANEL_TEXT_COLOR);
    RG_PanelSetLabel("r", line++, StringFormat("At risk %s (%.2f%%)   Max one trade %.2f%%",
-                    RG_FmtMoney(open_risk), risk_pct, InpMaxRiskPercentPerTrade), InpPanelTextColor);
+                    RG_FmtMoney(open_risk), risk_pct, InpMaxRiskPercentPerTrade), RG_PANEL_TEXT_COLOR);
    RG_PanelSetLabel("p", line++, StringFormat("Open trades %d / %d   Pending orders %d   Never more than %d",
-                    open_n, shown_cap, pend_n, InpHardMaxOpenPositions), InpPanelTextColor);
+                    open_n, shown_cap, pend_n, RG_PolicyHardMaxPositions()), RG_PANEL_TEXT_COLOR);
    RG_PanelSetLabel("a", line++, avg ? "Adding to losers: YES"
                                      : ("Adding to losers: NO — " + avg_reason),
-                    avg ? InpPanelAccentColor : InpPanelWarnColor);
+                    avg ? RG_PANEL_ACCENT_COLOR : RG_PANEL_WARN_COLOR);
 
    string acct = RG_IsHedgingAccount() ? "can hold several trades" : "one net trade per symbol";
    if(open_n >= 2)
       RG_PanelSetLabel("b", line++, StringFormat("Combined P/L %+.2f  (close all at %.2f)  [%s]",
                        basket_net, basket_tgt, acct),
-                       (basket_net >= basket_tgt ? InpPanelAccentColor : InpPanelTextColor));
+                       (basket_net >= basket_tgt ? RG_PANEL_ACCENT_COLOR : RG_PANEL_TEXT_COLOR));
    else
       RG_PanelSetLabel("b", line++, StringFormat("Stop %.2f / 0.01   Target %.2f / 0.01   Worst %.2f / 0.01  [%s]",
-                       InpSL_MoneyPer001, InpTP_MoneyPer001, InpMaxLossPer001, acct), InpPanelTextColor);
+                       InpSL_MoneyPer001, InpTP_MoneyPer001, InpMaxLossPer001, acct), RG_PANEL_TEXT_COLOR);
 
    RG_PanelSetLabel("m", line++, mode + "  ·  " + g_lastStatusReason, status_clr);
-   RG_PanelSetLabel("l", line++, "Last action: " + g_lastAction, InpPanelTextColor);
+   RG_PanelSetLabel("l", line++, "Last action: " + g_lastAction, RG_PANEL_TEXT_COLOR);
    RG_PanelSetLabel("t", line++, StringFormat("Closed trades today %d   Rechecks every tick + every %ds",
-                    g_dayClosedTrades, InpTimerSeconds), InpPanelTextColor);
+                    g_dayClosedTrades, RG_TIMER_SECONDS), RG_PANEL_TEXT_COLOR);
 
    ChartRedraw(0);
   }

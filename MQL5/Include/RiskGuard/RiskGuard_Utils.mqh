@@ -96,9 +96,7 @@ void RG_StateLoad()
 //+------------------------------------------------------------------+
 void RG_Log(const int level, const string msg)
   {
-   if(!InpLogToExperts)
-      return;
-   if(level > InpLogVerbosity)
+   if(level > RG_LOG_VERBOSITY)
       return;
    Print("RiskGuard| ", msg);
   }
@@ -117,19 +115,17 @@ void RG_Notify(const string msg)
    g_lastNotifyTime = now;
    g_lastAction = msg;
    RG_Log(1, msg);
-   if(InpAlertPopup)
+   if(InpAlerts != RG_ALERT_OFF)
       Alert("RiskGuard: ", msg);
-   if(InpAlertPush)
+   if(InpAlerts == RG_ALERT_PHONE)
       SendNotification("RiskGuard: " + msg);
-   if(InpAlertSound)
-      PlaySound(InpAlertSoundFile);
+   if(InpAlerts == RG_ALERT_POPUP_SOUND || InpAlerts == RG_ALERT_PHONE)
+      PlaySound(RG_ALERT_SOUND_FILE);
   }
 
 //+------------------------------------------------------------------+
 double RG_RiskBasis()
   {
-   if(InpRiskBase == RG_RISK_BALANCE)
-      return AccountInfoDouble(ACCOUNT_BALANCE);
    return AccountInfoDouble(ACCOUNT_EQUITY);
   }
 
@@ -215,12 +211,7 @@ bool RG_SymbolAllowed(const string symbol)
         }
      }
 
-   if(InpChartSymbolOnly)
-      return (symbol == _Symbol || in_whitelist);
-
-   if(n == 0)
-      return true;
-   return in_whitelist;
+   return (symbol == _Symbol || in_whitelist);
   }
 
 //+------------------------------------------------------------------+
@@ -461,7 +452,7 @@ double RG_CommissionForLots(const double lots)
 //+------------------------------------------------------------------+
 double RG_ExitTargetForLots(const double lots)
   {
-   return InpBasketMinProfit + RG_CommissionForLots(lots) + InpBasketExtraBuffer;
+   return InpBasketMinProfit + RG_CommissionForLots(lots);
   }
 
 //+------------------------------------------------------------------+
@@ -658,8 +649,7 @@ double RG_BasketNetProfit(const string symbol)
       if(g_pos.Symbol() != symbol)
          continue;
       net += g_pos.Profit();
-      if(InpBasketProfitIncludesSwap)
-         net += g_pos.Swap();
+      net += g_pos.Swap();
      }
    return net;
   }
@@ -696,7 +686,7 @@ double RG_PositionNetAfterCosts()
 //+------------------------------------------------------------------+
 void RG_PrepareTrade(const string symbol)
   {
-   g_trade.SetDeviationInPoints(InpMaxSlippagePoints);
+   g_trade.SetDeviationInPoints(RG_MAX_SLIPPAGE_POINTS);
    g_trade.SetAsyncMode(false);
    if(!RG_EnsureSymbol(symbol))
      {

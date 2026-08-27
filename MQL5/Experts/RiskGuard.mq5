@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.11"
+#property version   "1.20"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
 #property description "tiny-profit basket exit, dead-trade timer, and a day kill-switch."
@@ -49,46 +49,36 @@ int OnInit()
    ArrayInitialize(g_seenDeals, 0);
    RG_StateLoad();
 
-   if(InpTimerSeconds < 1)
-     {
-      Print("RiskGuard| InpTimerSeconds must be >= 1");
-      return INIT_PARAMETERS_INCORRECT;
-     }
    if(InpMaxLot <= 0.0 || InpMaxLossPer001 <= 0.0)
      {
-      Print("RiskGuard| MaxLot and MaxLossPer001 must be > 0");
+      Print("RiskGuard| Biggest lot and worst loss per 0.01 must be > 0");
       return INIT_PARAMETERS_INCORRECT;
      }
    if(InpAveragingMaxAdds < 0)
      {
-      Print("RiskGuard| AveragingMaxAdds must be >= 0");
+      Print("RiskGuard| Extra trades cannot be negative (use 0 to never add)");
       return INIT_PARAMETERS_INCORRECT;
      }
-   if(InpHardMaxOpenPositions < 1)
+   if(InpSL_MoneyPer001 <= 0.0 || InpTP_MoneyPer001 <= 0.0)
      {
-      Print("RiskGuard| HardMaxOpenPositions must be >= 1");
-      return INIT_PARAMETERS_INCORRECT;
-     }
-   if(InpMaxOpenPositions < 1)
-     {
-      Print("RiskGuard| MaxOpenPositions must be >= 1");
+      Print("RiskGuard| Normal stop and take-profit per 0.01 must be > 0");
       return INIT_PARAMETERS_INCORRECT;
      }
 
    double vmin = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    if(vmin > 0.0 && InpMaxLot + 1e-12 < vmin)
      {
-      Print("RiskGuard| MaxLot ", InpMaxLot, " < broker min volume ", vmin,
+      Print("RiskGuard| Biggest lot ", InpMaxLot, " is below broker min volume ", vmin,
             " — every fill would be closed");
       return INIT_PARAMETERS_INCORRECT;
      }
 
-   if(InpSLMode == RG_SL_MONEY_PER_001 && InpSL_MoneyPer001 > InpMaxLossPer001)
-      Print("RiskGuard| WARNING: SL money per 0.01 > MaxLossPer001 — hard max wins, SL will be snapped");
+   if(InpSL_MoneyPer001 > InpMaxLossPer001)
+      Print("RiskGuard| WARNING: normal stop per 0.01 is larger than worst loss — the ceiling wins");
 
-   if(InpTimeGuardEnabled && InpMustBeGreenSeconds > 0 && InpMaxHoldSeconds > 0 &&
+   if(InpMustBeGreenSeconds > 0 && InpMaxHoldSeconds > 0 &&
       InpMustBeGreenSeconds > InpMaxHoldSeconds)
-      Print("RiskGuard| WARNING: must-be-green seconds > max hold — max hold will fire first");
+      Print("RiskGuard| WARNING: 'still not in profit' seconds is longer than max hold — max hold wins");
 
    RG_SelectWhitelistSymbols();
    RG_ConfigureTrade();
@@ -97,7 +87,7 @@ int OnInit()
       Print("RiskGuard| WARNING: cannot trade yet — ", g_tradingBlockReason,
             " (panel will show CANNOT TRADE until this is fixed)");
 
-   if(!EventSetTimer(InpTimerSeconds))
+   if(!EventSetTimer(RG_TIMER_SECONDS))
      {
       Print("RiskGuard| EventSetTimer failed");
       return INIT_FAILED;
@@ -106,7 +96,7 @@ int OnInit()
    RG_GuardianSweep();
    RG_PanelUpdate();
 
-   RG_Log(1, "RiskGuard 1.11 started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.20 started on " + _Symbol);
    return INIT_SUCCEEDED;
   }
 

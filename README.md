@@ -1,6 +1,6 @@
 # RiskGuard for MetaTrader 5
 
-**Version 1.11**
+**Version 1.20**
 
 You trade. RiskGuard enforces the rules.
 
@@ -52,22 +52,22 @@ Step-by-step: [docs/INSTALL.md](docs/INSTALL.md)
 
 ## Quick start (~2,000 account)
 
-Open **Inputs**. Groups are numbered and written in plain language. Most people only change:
+Open **Inputs**. Five groups, 27 settings, plain language. Most people only change:
 
 | Setting (as shown in Inputs) | Start with |
 |------------------------------|------------|
-| Biggest lot allowed on ONE trade | `0.05` |
+| Biggest lot on ONE trade | `0.05` |
 | Worst loss allowed per 0.01 lot | `5.0` |
 | Normal stop: lose this much per 0.01 lot if hit | `3.0` |
 | Take-profit: bank this much per 0.01 lot | `4.0` |
-| Extra trades … every open trade is this lot or smaller | `0.02` |
-| Extra trades … open risk is this % … or less | `0.50` |
+| How many extras (0 = never add) | `2` |
+| Add only if EVERY open trade is this lot or smaller | `0.02` |
 | Your broker commission per 0.01 lot | **your** cost (example `0.04`) |
 | Lock the day if equity is down this % from this morning | `3.0` |
-| If still not in profit after this many seconds | `120` |
-| Never hold a single trade longer than | `180` |
 
-Full dictionary of every Input, with the **same labels as the dialog**: [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md)
+Stops, pending kills, and “no hoping” are always on. Full dictionary: [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md)
+
+Upgrading from 1.11: **remove the EA from the chart and attach it again** so Inputs do not land on the wrong lines.
 
 ---
 
@@ -79,7 +79,7 @@ Full dictionary of every Input, with the **same labels as the dialog**: [docs/SE
 | [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md) | Every Input, same wording as MT5 |
 | [docs/BEHAVIOR.md](docs/BEHAVIOR.md) | Exact runtime rules (the spec) |
 | [docs/INSTALL.md](docs/INSTALL.md) | Copy, compile, permissions, self-test |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.11 / 1.10 / 1.01 / 1.00 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in 1.20 / 1.11 / 1.10 / … |
 
 ---
 

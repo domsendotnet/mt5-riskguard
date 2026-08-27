@@ -25,9 +25,9 @@ bool RG_AveragingPrivilegeOK(const string symbol, string &reason,
                              const bool skip_session_blocks = false)
   {
    reason = "";
-   if(!InpAveragingEnabled)
+   if(!RG_PolicyAveragingOn())
      {
-      reason = "turned off in settings";
+      reason = "extras set to 0 in settings";
       return false;
      }
    if(!RG_IsHedgingAccount())
@@ -85,14 +85,8 @@ int RG_AllowedMaxPositions(const string symbol)
   {
    string reason;
    bool avg_ok = RG_AveragingPrivilegeOK(symbol, reason, true);
-   int soft = InpMaxOpenPositions;
-   if(avg_ok)
-      soft = 1 + InpAveragingMaxAdds;
-   int hard = InpHardMaxOpenPositions;
-   if(hard < 1)
-      hard = 1;
-   if(soft < 1)
-      soft = 1;
+   int hard = RG_PolicyHardMaxPositions();
+   int soft = avg_ok ? hard : 1;
    return (int)MathMin(soft, hard);
   }
 
@@ -104,7 +98,7 @@ bool RG_ClosePositionTicket(const ulong ticket, const string why)
    string symbol = g_pos.Symbol();
    RG_PrepareTrade(symbol);
    g_trade.SetExpertMagicNumber(g_pos.Magic());
-   bool ok = g_trade.PositionClose(ticket, InpMaxSlippagePoints);
+   bool ok = g_trade.PositionClose(ticket, RG_MAX_SLIPPAGE_POINTS);
    if(ok)
       RG_Notify(StringFormat("closed #%s (%s) — %s", IntegerToString((long)ticket), symbol, why));
    else
@@ -130,7 +124,7 @@ bool RG_ReducePositionTo(const ulong ticket, const double target_lots, const str
       return false;
    RG_PrepareTrade(symbol);
    g_trade.SetExpertMagicNumber(g_pos.Magic());
-   bool ok = g_trade.PositionClosePartial(ticket, close_vol, InpMaxSlippagePoints);
+   bool ok = g_trade.PositionClosePartial(ticket, close_vol, RG_MAX_SLIPPAGE_POINTS);
    if(ok)
       RG_Notify(StringFormat("reduced #%s to %.2f — %s", IntegerToString((long)ticket), tgt, why));
    else
@@ -224,9 +218,6 @@ void RG_DeleteManagedPendings(const string symbol_filter, const string why)
 double RG_DesiredSLDistance(const string symbol, const double lots,
                             const ENUM_ORDER_TYPE otype, const double open_price)
   {
-   if(InpSLMode == RG_SL_POINTS)
-      return InpSL_Points * RG_Point(symbol);
-
    double money = RG_ScaledMoneyPer001(InpSL_MoneyPer001, lots);
    double dist = 0.0;
    if(!RG_MoneyToDistance(symbol, lots, otype, open_price, money, dist))
@@ -242,21 +233,13 @@ double RG_MaxSLDistance(const string symbol, const double lots,
    double dist = 0.0;
    if(RG_MoneyToDistance(symbol, lots, otype, open_price, money, dist))
       return dist;
-   if(InpSLMode == RG_SL_POINTS)
-      return InpSL_Points * RG_Point(symbol);
    return 0.0;
   }
 
 //+------------------------------------------------------------------+
 double RG_DesiredTPDistance(const string symbol, const double lots,
-                            const ENUM_ORDER_TYPE otype, const double open_price,
-                            const double sl_distance)
+                            const ENUM_ORDER_TYPE otype, const double open_price)
   {
-   if(InpTPMode == RG_TP_POINTS)
-      return InpTP_Points * RG_Point(symbol);
-   if(InpTPMode == RG_TP_R_MULTIPLE)
-      return MathMax(sl_distance, RG_Point(symbol)) * InpTP_RMultiple;
-
    double money = RG_ScaledMoneyPer001(InpTP_MoneyPer001, lots);
    double dist = 0.0;
    if(!RG_MoneyToProfitDistance(symbol, lots, otype, open_price, money, dist))
@@ -274,7 +257,7 @@ bool RG_ModifySLTP(const ulong ticket, double sl, double tp, const string why)
    tp = (tp > 0.0) ? RG_RoundToTick(symbol, tp) : 0.0;
 
    RG_PrepareTrade(symbol);
-   int attempts = MathMax(1, InpModifyRetries);
+   int attempts = MathMax(1, RG_MODIFY_RETRIES);
    for(int attempt = 0; attempt < attempts; attempt++)
      {
       g_trade.SetExpertMagicNumber(g_pos.Magic());
@@ -314,21 +297,21 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
    double sl_dist = RG_DesiredSLDistance(symbol, lots, otype, open_price);
    double max_sl_dist = RG_MaxSLDistance(symbol, lots, otype, open_price);
 
-   if((InpForceSL || InpBlockRemoveSL) && sl_dist <= 0.0 && cur_sl <= 0.0)
+   if(sl_dist <= 0.0 && cur_sl <= 0.0)
      {
       RG_Log(0, StringFormat("cannot compute SL distance #%s — money math failed",
                              IntegerToString((long)ticket)));
       return true; // naked-timeout path will kill it; do not guess points
      }
 
-   double tp_dist = RG_DesiredTPDistance(symbol, lots, otype, open_price, sl_dist);
+   double tp_dist = RG_DesiredTPDistance(symbol, lots, otype, open_price);
 
    double new_sl = cur_sl;
    double new_tp = cur_tp;
    bool changed = false;
    bool sl_past_max = false;
 
-   if(cur_sl <= 0.0 && (InpForceSL || InpBlockRemoveSL) && sl_dist > 0.0)
+   if(cur_sl <= 0.0 && sl_dist > 0.0)
      {
       double target_sl = (ptype == POSITION_TYPE_BUY) ? (open_price - sl_dist)
                                                       : (open_price + sl_dist);
@@ -336,7 +319,7 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
       changed = true;
      }
 
-   if(InpBlockWidenSL && max_sl_dist > 0.0)
+   if(max_sl_dist > 0.0)
      {
       double sl_now = (new_sl > 0.0 ? new_sl : cur_sl);
       if(sl_now > 0.0)
@@ -355,7 +338,7 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
         }
      }
 
-   if(in_basket && InpDisableTPInBasket)
+   if(in_basket)
      {
       if(cur_tp > 0.0)
         {
@@ -363,7 +346,7 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
          changed = true;
         }
      }
-   else if(InpForceTP && cur_tp <= 0.0)
+   else if(cur_tp <= 0.0)
      {
       if(tp_dist > 0.0)
         {
@@ -513,12 +496,6 @@ void RG_EnforceSize(const ulong ticket)
    if(!over_lot && !over_risk)
       return;
 
-   if(InpOnOversize == RG_OVERSIZE_CLOSE)
-     {
-      RG_ClosePositionTicket(ticket, StringFormat("too big (lot %.2f, risk %.2f%%)", lots, risk_pct));
-      return;
-     }
-
    double allowed = RG_MaxAllowedLotForRisk(symbol, otype, open_price, dist);
    if(allowed > InpMaxLot)
       allowed = InpMaxLot;
@@ -581,7 +558,7 @@ void RG_EnforcePositionCaps()
      {
       string symbol = symbols[s];
 
-      if(g_dayLocked && !InpDayLockFlatten && g_lockTime > 0)
+      if(g_dayLocked && g_lockTime > 0)
         {
          for(int i = PositionsTotal() - 1; i >= 0; i--)
            {
@@ -610,19 +587,14 @@ void RG_EnforcePositionCaps()
         }
 
       int total = RG_CountManaged(symbol);
-      if(total >= 2 && InpAveragingSameDirection)
+      if(total >= 2)
         {
          int buys = RG_CountManagedDirection(symbol, POSITION_TYPE_BUY);
          int sells = RG_CountManagedDirection(symbol, POSITION_TYPE_SELL);
          if(buys > 0 && sells > 0)
            {
-            if(InpOnIllegalAdd == RG_ILLEGAL_FLATTEN)
-               RG_FlattenSymbol(symbol, "buy+sell mix not allowed — closed all");
-            else
-              {
-               int extra = (int)MathMin(buys, sells);
-               RG_CloseNewestOnSymbol(symbol, extra, "buy+sell mix not allowed — extra trade closed");
-              }
+            int extra = (int)MathMin(buys, sells);
+            RG_CloseNewestOnSymbol(symbol, extra, "buy+sell mix not allowed — extra trade closed");
             total = RG_CountManaged(symbol);
            }
         }
@@ -630,13 +602,8 @@ void RG_EnforcePositionCaps()
       int allowed = RG_AllowedMaxPositions(symbol);
       total = RG_CountManaged(symbol);
       if(total > allowed)
-        {
-         if(InpOnIllegalAdd == RG_ILLEGAL_FLATTEN)
-            RG_FlattenSymbol(symbol, "too many trades — closed all");
-         else
-            RG_CloseNewestOnSymbol(symbol, total - allowed,
-                                   StringFormat("too many trades (max %d) — extra closed", allowed));
-        }
+         RG_CloseNewestOnSymbol(symbol, total - allowed,
+                                StringFormat("too many trades (max %d) — extra closed", allowed));
      }
   }
 
@@ -700,9 +667,6 @@ bool RG_PendingWouldBeIllegal(const string symbol, const double volume, string &
 //+------------------------------------------------------------------+
 void RG_EnforcePendings()
   {
-   if(!InpManagePendings)
-      return;
-
    if(g_dayLocked)
      {
       RG_DeleteManagedPendings("", "the day is locked");
@@ -840,7 +804,7 @@ void RG_EnforceBasketExit(const string symbol)
 //+------------------------------------------------------------------+
 void RG_EnforceTimeGuard()
   {
-   if(!InpTimeGuardEnabled)
+   if(!RG_PolicyTimeOn())
       return;
    datetime now = TimeTradeServer();
 
@@ -853,7 +817,7 @@ void RG_EnforceTimeGuard()
       double net = RG_PositionNetAfterCosts();
       ulong ticket = g_pos.Ticket();
       int basket = RG_CountManaged(symbol);
-      if(InpTimeGuardSkipBasket && basket >= 2)
+      if(basket >= 2)
          continue;
 
       int age = (int)(now - opened);
@@ -877,8 +841,6 @@ void RG_EnforceTimeGuard()
 //+------------------------------------------------------------------+
 void RG_EnforceNakedSL()
   {
-   if(!InpBlockRemoveSL && !InpForceSL)
-      return;
    datetime now = TimeTradeServer();
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
@@ -894,7 +856,7 @@ void RG_EnforceNakedSL()
          continue;
       if(g_pos.StopLoss() > 0.0)
          continue;
-      if(InpNakedSLTimeoutSec >= 0 && age >= InpNakedSLTimeoutSec)
+      if(age >= RG_NAKED_SL_TIMEOUT_SEC)
          RG_ClosePositionTicket(ticket, "no stop loss could be set — closed");
      }
   }
@@ -917,7 +879,7 @@ void RG_UpdateDayState()
       RG_StateSave();
      }
 
-   if(!InpDayLockEnabled)
+   if(!RG_PolicyDayOn())
       return;
 
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -1117,11 +1079,10 @@ void RG_GuardianSweep()
 
    // 2. Day lock flatten until actually flat (if a close fails, fall through
    //    and still put SL/size on whatever remains)
-   if(g_dayLocked && InpDayLockFlatten)
+   if(g_dayLocked)
      {
       bool flat = RG_FlattenAllManaged("day locked — closing everything");
-      if(InpManagePendings)
-         RG_DeleteManagedPendings("", "the day is locked");
+      RG_DeleteManagedPendings("", "the day is locked");
       if(flat && RG_CountManaged() == 0)
         {
          RG_RefreshStatusReason();

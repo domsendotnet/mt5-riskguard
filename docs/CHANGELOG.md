@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.20 — 2026-08-26
+
+Simpler Inputs without taking away policy. **Re-attach the EA** — the Input list was rebuilt (old saved values would land on the wrong lines).
+
+- 70-odd knobs / 10 groups → **27 settings / 5 groups**
+- Stops and targets are money-per-0.01 only (no points / R-multiple modes)
+- Adding on/off is `How many extras` (`0` = never)
+- Position cap is always `1 + extras`
+- Day lock / dead-trade timer: `0` means off (no extra enable switches)
+- Alerts are one dropdown (silent / pop-up / pop-up+sound / phone)
+- Always on, not in the dialog: force stop+target, no hoping, pending killer, same-direction extras, shrink-or-close, day-lock flatten, equity %, this chart always watched
+- Panel look (font/colors) is built in; you still place the box
+- Docs rewritten against the 1.20 dialog
+
 ## 1.11 — 2026-08-26
 
 Settings and documentation so a first-time user can use the EA without knowing MQL5. **Protection behavior is unchanged from 1.10.**

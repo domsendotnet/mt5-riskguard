@@ -1,8 +1,8 @@
-# Behavior specification (RiskGuard 1.11)
+# Behavior specification (RiskGuard 1.20)
 
 This is the **engineer’s spec** — exact runtime rules. If you are using the EA, start with [USER_GUIDE.md](USER_GUIDE.md) and [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). Those use the same words as the Inputs dialog.
 
-This document is the source of truth for what RiskGuard does at runtime. Version **1.11** is labels, panel wording, and docs. Protection behavior is the 1.10 guardian loop.
+This document is the source of truth for what RiskGuard does at runtime. Version **1.20** is the same 1.10 guardian loop with a smaller policy surface: money-only stops/targets, always-on fail-closed mechanics, extras-count as the averaging switch (`0` = off), day lock on if a limit is > 0.
 
 ## Event model
 
@@ -39,7 +39,7 @@ If any check fails: **no actions**, panel mode **CANNOT TRADE**, reason on the p
 A position or pending is managed when:
 
 1. Guard is enabled
-2. Symbol passes chart/whitelist filter
+2. Symbol is this chart, or on the extra-symbols list
 3. Magic passes magic-mode filter
 
 ## Risk math
@@ -54,7 +54,7 @@ scaled_money = money_per_001 × (lots / 0.01)
 
 Prices are aligned to `SYMBOL_TRADE_TICK_SIZE`. Stop distance uses `max(stops_level, freeze_level)`. Filling mode is set **per symbol**.
 
-Risk % uses `ACCOUNT_EQUITY` or `ACCOUNT_BALANCE` per `InpRiskBase`.
+Risk % uses `ACCOUNT_EQUITY` (open P/L counts).
 
 Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fails on that one call. Inventing a new SL never uses that fallback.
 
@@ -74,16 +74,16 @@ Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fail
 
 ## Stop loss rules
 
-- If Force SL (or Block remove) and SL missing → set to auto distance (preferred breath, default money/0.01).
-- If Block widen and current SL distance implies loss > `MaxLossPer001` scale → snap SL to max-risk distance.
+- If SL missing → set to auto distance (preferred breath, money/0.01).
+- If current SL distance implies loss > `MaxLossPer001` scale → snap SL to max-risk distance.
 - If broker clamp still leaves loss/0.01 above the hard max → **close**.
 - If still naked after timeout → close.
 - Loss/0.01 over max is **not** fixed by reducing lot (risk per 0.01 is a distance). Snap or close.
 
 ## Take profit rules
 
-- Single-leg: Force TP sets TP from money / points / R when TP is missing.
-- Basket (2+ managed on symbol) + `Disable TP in basket`: clear per-leg TP so basket exit owns the trade.
+- Single-leg: set TP from money-per-0.01 when TP is missing.
+- Basket (2+ managed on symbol): clear per-leg TP so the combined tiny-profit exit owns the trade.
 
 ## Size / risk caps
 
@@ -100,27 +100,22 @@ If risk cannot be measured at all → close.
 
 Allowed only if all gates pass:
 
-- Averaging enabled
+- Extras > 0
 - Hedging account
 - Not day-locked / not in cooldown (for *new* risk)
 - Every leg lot ≤ averaging max lot
 - Open risk % on the symbol ≤ averaging max risk %
-- Count ≤ `1 + max adds` and ≤ hard cap
+- Count ≤ `1 + extras`
 
-When privilege is false, the cap is `MaxOpenPositions` (default 1). That setting is real: a value of 2 allows two positions without averaging privilege.
+When privilege is false, the cap is **1**. Hard cap is always `1 + extras`.
 
-Illegal extra / hedge:
+Illegal extra / hedge: close the **newest** violating position (retry that same ticket if the close fails; never skip to the older leg). Buy+sell mix is always rejected.
 
-- `Close add` — close the **newest** violating position (and retry that same ticket if the close fails; never skip to the older leg)
-- `Flatten` — close all managed positions on that symbol
-
-Same-direction option rejects buy+sell mixes on the symbol.
-
-Cooldown and day-lock **do not flatten already-open legs** unless day-lock flatten is on. They reject **new** positions (open time ≥ cooldown start / lock time) and delete pendings.
+Cooldown does **not** flatten already-open legs. It rejects **new** positions (open time ≥ cooldown start) and deletes pendings. Day lock **does** flatten everything watched, then keeps trying until they are gone.
 
 ## Pending orders (prevent if possible)
 
-When `InpManagePendings` is true, a pending is deleted if:
+A pending is deleted if:
 
 - Day lock or cooldown is active
 - Volume > MaxLot
@@ -135,7 +130,7 @@ When managed count on a symbol ≥ 2:
 
 ```text
 net    = Σ(profit [+ swap])
-target = MinProfit + CommissionPer001 × (Σlots / 0.01) + ExtraBuffer
+target = MinProfit + CommissionPer001 × (Σlots / 0.01)
 if net ≥ target → close all managed legs on symbol
 ```
 
@@ -162,7 +157,7 @@ Lock when:
 - Equity drawdown from day-start equity ≥ max day loss %, or
 - Closed trade count ≥ max day trades
 
-On lock: optional flatten of all managed positions **retried until flat**; new fills closed while locked; pendings deleted.
+On lock: flatten all managed positions **retried until flat**; new fills closed while locked; pendings deleted.
 
 Day stamp, day-start equity, closed-trade count, lock flag, lock time, cooldown start and cooldown until are persisted in terminal **global variables** (per account login) so reloading the EA mid-session does not reset the day lock.
 
@@ -190,4 +185,4 @@ A **full** closed deal with negative profit+swap+commission starts a cooldown wi
 
 ## Versioning
 
-EA `#property version` tracks releases. Behaviour that changes risk outcomes must update this document in the same change. Wording-only releases (1.11) update USER_GUIDE and SETTINGS_REFERENCE so they stay the same as the Inputs dialog.
+EA `#property version` tracks releases. Behaviour that changes risk outcomes must update this document in the same change. Policy-surface releases (1.20) must list every built-in constant in SETTINGS_REFERENCE (“Always on”) so removing a dialog knob is not silent.
