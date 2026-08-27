@@ -4,7 +4,7 @@
 //|  during liquid hours. Read PASS/FAIL in the Experts tab.        |
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
-#property version   "1.28"
+#property version   "1.30"
 #property strict
 #property script_show_confirm
 #property description "RiskGuard self-test: money math, tick rounding, volume, basket target, no-trade hours."
@@ -32,7 +32,7 @@ void RG_Expect(const bool cond, const string name, const string detail)
 //+------------------------------------------------------------------+
 void OnStart()
   {
-   Print("========== RiskGuard self-test 1.28 ==========");
+   Print("========== RiskGuard self-test 1.30 ==========");
    Print("Symbol ", _Symbol, "  digits ", (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS),
          "  tick ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE), 8),
          "  tick_value ", DoubleToString(SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE), 8));
@@ -43,6 +43,21 @@ void OnStart()
              "scale 0.02 x 3", DoubleToString(RG_ScaledMoneyPer001(3.0, 0.02), 4));
    RG_Expect(MathAbs(RG_ScaledMoneyPer001(5.0, 0.05) - 25.0) < 1e-9,
              "scale 0.05 x 5", DoubleToString(RG_ScaledMoneyPer001(5.0, 0.05), 4));
+   RG_Expect(RG_AveragingStopFactor() >= 1.0, "averaging stop factor >= 1",
+             DoubleToString(RG_AveragingStopFactor(), 2));
+   RG_Expect(MathAbs(RG_StopMoneyPer001(_Symbol) - InpMaxLossPer001) < 1e-9,
+             "single-trade stop money (no basket)",
+             DoubleToString(RG_StopMoneyPer001(_Symbol), 4));
+   RG_Expect(MathAbs(RG_ScaledMoneyPer001(InpTP_MoneyPer001, 0.01) * 0.70 -
+                     InpTP_MoneyPer001 * 0.70) < 1e-9,
+             "BE trigger 70% of TP on 0.01",
+             DoubleToString(RG_ScaledMoneyPer001(InpTP_MoneyPer001, 0.01) * 0.70, 4));
+   RG_Expect(MathAbs(RG_ScaledMoneyPer001(0.10, 0.01) - 0.10) < 1e-9,
+             "BE lock 0.10 per 0.01",
+             DoubleToString(RG_ScaledMoneyPer001(0.10, 0.01), 4));
+   RG_Expect(!RG_PolicyBreakEvenOn() || InpBE_TriggerPercent > 0.0,
+             "BE off unless % > 0",
+             DoubleToString(InpBE_TriggerPercent, 2));
 
    RG_Expect(MathAbs(RG_CommissionForLots(0.01) - InpCommissionPer001) < 1e-9,
              "commission 0.01", DoubleToString(RG_CommissionForLots(0.01), 4));

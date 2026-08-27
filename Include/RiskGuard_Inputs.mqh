@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                           RiskGuard_Inputs.mqh |
 //|  Policy only. Implementation details are built-in constants.   |
-//|  1.28: production pass — no-trade hours on by default.         |
+//|  1.30: optional break-even lock on a single trade.             |
 //+------------------------------------------------------------------+
 #ifndef RISKGUARD_INPUTS_MQH
 #define RISKGUARD_INPUTS_MQH
@@ -90,6 +90,19 @@ input ENUM_RG_CLOCK InpNoTradeClock = RG_CLOCK_BERLIN; // Clock for the hours be
 input string        InpNoTradeHours = "13:45-15:15,16:00-16:05"; // Close EVERYTHING in these hours (Berlin by default). Empty = off
 
 //====================================================================
+// Averaging stop (appended — older saved Inputs keep their values)
+//====================================================================
+input group "═══ 3. Adding to losers ═══"
+input double InpAveragingStopFactor = 2.0; // When 2+ trades: stop this many times as wide (2 = twice, 3 = three times). 1 = don't
+
+//====================================================================
+// Break-even lock (appended — older saved Inputs keep their values)
+//====================================================================
+input group "═══ 2. Your money ═══"
+input double InpBE_TriggerPercent = 0.0;  // Optional: move stop to break-even after this % of take-profit (0 = off). Try 70
+input double InpBE_LockPer001     = 0.10; // Then lock this much per 0.01 past break-even (plus commission)
+
+//====================================================================
 // Built-in policy — always on. Not in the dialog.
 //====================================================================
 #define RG_TIMER_SECONDS            1
@@ -141,6 +154,12 @@ bool RG_PolicyNoTradeHoursOn()
    StringTrimLeft(s);
    StringTrimRight(s);
    return (StringLen(s) > 0);
+  }
+
+//+------------------------------------------------------------------+
+bool RG_PolicyBreakEvenOn()
+  {
+   return (InpBE_TriggerPercent > 0.0);
   }
 
 #endif // RISKGUARD_INPUTS_MQH

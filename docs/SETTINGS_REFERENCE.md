@@ -1,10 +1,12 @@
-# Settings reference (RiskGuard 1.28)
+# Settings reference (RiskGuard 1.30)
 
 These names are **exactly** what you see in MetaTrader:
 
 **Right-click the chart → Expert list → Properties → Inputs.**
 
-There are **28** settings in **6 groups**. Everything else is built in (stop always on, pendings always watched, extras always same-direction, and so on). You still choose the **policy**. RiskGuard chooses the **mechanics**.
+There are **31** settings in **6 groups**. Everything else is built in (stop always on, pendings always watched, extras always same-direction, and so on). You still choose the **policy**. RiskGuard chooses the **mechanics**.
+
+**1.29** appends the averaging stop-widen. **1.30** appends break-even lock. Old saved values stay on the same lines.
 
 **Upgrading from 1.26:** group 6 was **appended**. Old saved values stay on the same lines.
 
@@ -37,6 +39,8 @@ Defaults assume a roughly **2,000** account and **1-minute gold**.
 | How many extras (0 = never add) | `2` | `0` turns adding off. |
 | Add only if EVERY open trade is this lot or smaller | `0.02` | Bigger than this already in? No add. |
 | Your broker commission per 0.01 lot | `0.04` | **Put your real cost here.** |
+| When 2+ trades: stop this many times as wide | `2` | Averaging room. `1` = don’t widen. |
+| Move stop to break-even after this % of take-profit | `0` | Off. Set `70` if you want it. |
 | Clock for the hours below | Europe/Berlin | Type hours in Berlin time. DST is automatic. Server is converted. |
 | Close EVERYTHING in these hours | `13:45-15:15,16:00-16:05` | Empty = off. |
 
@@ -65,6 +69,8 @@ This chart’s symbol is always included. There is no “watch the whole account
 | Stop: lose this much per 0.01 lot if hit (your money) | `5.0` | Auto-stop **and** the farthest it may sit. Dragging it farther is pulled back. If gold’s min distance is wider for a moment, the tightest legal stop stays and we retry — we do not close the trade. |
 | Take-profit: bank this much per 0.01 lot | `4.0` | The usual bank. With 2+ trades open, per-trade targets are cleared so they exit together instead. |
 | Optional: one trade max % of equity (0 = off — lot and stop are enough) | `0` | Extra size cap vs account. **Leave 0** unless you want % to shrink lots. At 2,000 equity, stop 5 and lot 0.08 is already 2% — a 1% cap would cut the lot you typed. |
+| Optional: move stop to break-even after this % of take-profit | `0` | **At the bottom of Inputs.** `0` = off. **`70` = seventy percent**, not 0.70. When floating profit is 70% of the take-profit money, SL moves to BE + lock. Single trade only. |
+| Then lock this much per 0.01 past break-even | `0.10` | Extra locked profit per 0.01, **plus commission**, so a BE hit is still green after costs. |
 | Optional: all trades together max % of equity (0 = off) | `0` | Extra combined cap. **Leave 0** unless you want it. |
 
 Stops and targets are always in **money per 0.01 lot**. There is no points / R-multiple mode — convert to money once and you are done.
@@ -93,6 +99,9 @@ Otherwise the extra is closed (a pending extra is deleted). Buy+sell mix is alwa
 | Optional: add only if open risk ≤ this % (0 = off — add-on lot is enough) | `0` | Extra add gate vs account. Leave 0 unless you want it. |
 | Close all together at this tiny profit (your money, before commission) | `0.01` | Combined “just green”. |
 | Your broker commission per 0.01 lot | `0.04` | Folded into the combined target so a fake BE does not print a loss. |
+| When 2+ trades: stop this many times as wide | `2` | **At the bottom of Inputs** (appended so old values don’t shift). `2` = twice the single-trade stop on every leg. `3` = three times. `1` = don’t widen. |
+
+With 2+ trades, a 5-per-0.01 stop becomes **10** at factor 2 (existing legs are pushed out, new legs start there). Take-profits still come off. They still exit together at the tiny combined target.
 
 They close together when:
 

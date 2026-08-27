@@ -146,12 +146,18 @@ void RG_PanelUpdate()
 
    string acct = RG_IsHedgingAccount() ? "can hold several trades" : "one net trade per symbol";
    if(open_n >= 2)
-      RG_PanelSetLabel("b", line++, StringFormat("Combined P/L %+.2f  (close all at %.2f)  [%s]",
-                       basket_net, basket_tgt, acct),
+      RG_PanelSetLabel("b", line++, StringFormat("Combined P/L %+.2f  (close all at %.2f)  stop %.2f/0.01 (%.0f×)  [%s]",
+                       basket_net, basket_tgt, RG_StopMoneyPer001(_Symbol), RG_AveragingStopFactor(), acct),
                        (basket_net >= basket_tgt ? RG_PANEL_ACCENT_COLOR : RG_PANEL_TEXT_COLOR));
    else
-      RG_PanelSetLabel("b", line++, StringFormat("Stop %.2f / 0.01   Target %.2f / 0.01  [%s]",
-                       InpMaxLossPer001, InpTP_MoneyPer001, acct), RG_PANEL_TEXT_COLOR);
+      {
+       string be = "";
+       if(RG_PolicyBreakEvenOn())
+          be = StringFormat("   BE after %.0f%% of target (+%.2f/0.01)",
+                            InpBE_TriggerPercent, InpBE_LockPer001);
+       RG_PanelSetLabel("b", line++, StringFormat("Stop %.2f / 0.01   Target %.2f / 0.01%s  [%s]",
+                        InpMaxLossPer001, InpTP_MoneyPer001, be, acct), RG_PANEL_TEXT_COLOR);
+      }
 
    if(StringLen(hours_line) > 0)
       RG_PanelSetLabel("h2", line++, hours_line,

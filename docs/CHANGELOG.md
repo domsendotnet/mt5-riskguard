@@ -1,6 +1,25 @@
 # Changelog
 
-Current build: **1.28**. Every doc in `docs/` plus `README.md` is written for that version.
+Current build: **1.30**. Every doc in `docs/` plus `README.md` is written for that version.
+
+## 1.30 — 2026-08-27
+
+Optional break-even lock on a **single** trade, so a winner does not walk back to red.
+
+- Two Inputs appended (old saved values do not shift): **move stop to break-even after this % of take-profit** (`0` = off — try `70`) and **lock this much per 0.01 past break-even** (default `0.10`, plus commission so a hit is still green after costs).
+- Only when **one** trade is open. A 2+ basket is left to the averaging stop — BE would stop the first leg out.
+- Does not pull a stop backwards if it is already better than the lock.
+- Auto-SL will **not** snap a profit-side lock back to the 5-loss stop (that distance is not a “too-wide loss”).
+- Default is **off**. Set 70 yourself if you want it.
+
+## 1.29 — 2026-08-27
+
+Averaging was keeping the single-scalp stop, so the first leg got stopped out before extras could help.
+
+- New Input **When 2+ trades: stop this many times as wide** (default `2`, appended — old saved values do not shift). `1` = don’t widen, `3` = three times.
+- With 2+ managed trades on a symbol, **every** leg (old and new) is moved to `stop × factor`. Take-profits still come off so they exit together at the tiny combined target.
+- Hard money-stop uses the same wider budget, so it does not flatten the basket at the original 5.
+- Back to one trade: stop is the normal 5 again (if you are already past 5, that leftover is closed).
 
 ## 1.28 — 2026-08-27
 

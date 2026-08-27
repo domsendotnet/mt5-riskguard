@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "RiskGuard"
 #property link      "https://github.com/domsendotnet/mt5-riskguard"
-#property version   "1.28"
+#property version   "1.30"
 #property strict
 #property description "RiskGuard watches your trades: stop/target, lot caps, no revenge stacking,"
 #property description "tiny-profit basket exit, dead-trade timer, day kill-switch, no-trade hours."
@@ -81,6 +81,28 @@ int OnInit()
    if(InpAveragingMaxAdds > 0 && InpAveragingMaxLot > InpMaxLot + 1e-8)
       Print("RiskGuard| WARNING: add-on max lot is bigger than biggest lot — the biggest-lot cap already blocks that");
 
+   if(InpAveragingStopFactor < 1.0)
+     {
+      Print("RiskGuard| Averaging stop factor must be 1 or more (1 = don't widen, 2 = twice as wide)");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(InpAveragingMaxAdds > 0 && InpAveragingStopFactor <= 1.0 + 1e-12)
+      Print("RiskGuard| WARNING: averaging stop factor is 1 — extras still use the single-trade stop, so the first leg can get stopped out");
+
+   if(InpBE_TriggerPercent < 0.0 || InpBE_TriggerPercent > 100.0)
+     {
+      Print("RiskGuard| Break-even % must be 0 (off) through 100 (e.g. 70, not 0.70)");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(InpBE_LockPer001 < 0.0)
+     {
+      Print("RiskGuard| Break-even lock per 0.01 cannot be negative");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(InpBE_TriggerPercent > 0.0 && InpBE_TriggerPercent < 10.0)
+      Print("RiskGuard| WARNING: break-even % is ", DoubleToString(InpBE_TriggerPercent, 1),
+            " — 70 means seventy percent of take-profit, not 0.70");
+
    string hours_err;
    if(!RG_NoTradeHoursValidate(hours_err))
      {
@@ -114,7 +136,7 @@ int OnInit()
       return INIT_FAILED;
      }
 
-   RG_Log(1, "RiskGuard 1.28 started on " + _Symbol);
+   RG_Log(1, "RiskGuard 1.30 started on " + _Symbol);
    RG_LogNoTradeHoursMapping();
    if(RG_IsNoTradeHoursActive())
       Print("RiskGuard| WARNING: inside a no-trade slot right now — watched trades will be closed on the next tick");

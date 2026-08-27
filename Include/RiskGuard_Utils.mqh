@@ -443,6 +443,35 @@ double RG_ScaledMoneyPer001(const double per001, const double lots)
   }
 
 //+------------------------------------------------------------------+
+double RG_AveragingStopFactor()
+  {
+   double f = InpAveragingStopFactor;
+   if(f < 1.0)
+      f = 1.0;
+   return f;
+  }
+
+//+------------------------------------------------------------------+
+// One trade: InpMaxLossPer001. Two or more on the same symbol while
+// adding is on: that times the widen factor, so the first leg is not
+// stopped out at the single-scalp distance.
+//+------------------------------------------------------------------+
+double RG_StopMoneyPer001(const string symbol)
+  {
+   double base = InpMaxLossPer001;
+   if(base <= 0.0)
+      return 0.0;
+   if(!RG_PolicyAveragingOn())
+      return base;
+   double f = RG_AveragingStopFactor();
+   if(f <= 1.0 + 1e-12)
+      return base;
+   if(RG_CountManaged(symbol) < 2)
+      return base;
+   return base * f;
+  }
+
+//+------------------------------------------------------------------+
 double RG_CommissionForLots(const double lots)
   {
    if(lots <= 0.0)
@@ -615,12 +644,17 @@ double RG_PositionRiskMoney(const ulong ticket)
    ENUM_ORDER_TYPE otype = (g_pos.PositionType() == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
 
    if(sl <= 0.0)
-      return RG_ScaledMoneyPer001(InpMaxLossPer001, lots);
+      return RG_ScaledMoneyPer001(RG_StopMoneyPer001(symbol), lots);
+
+   if(g_pos.PositionType() == POSITION_TYPE_BUY && sl >= open_price - 1e-12)
+      return 0.0; // already a break-even / profit stop
+   if(g_pos.PositionType() == POSITION_TYPE_SELL && sl > 0.0 && sl <= open_price + 1e-12)
+      return 0.0;
 
    double dist = MathAbs(open_price - sl);
    double money = 0.0;
    if(!RG_DistanceToMoney(symbol, lots, otype, open_price, dist, money))
-      return RG_ScaledMoneyPer001(InpMaxLossPer001, lots);
+      return RG_ScaledMoneyPer001(RG_StopMoneyPer001(symbol), lots);
    return money;
   }
 

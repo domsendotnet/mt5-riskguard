@@ -1,10 +1,10 @@
-# Behavior specification (RiskGuard 1.28)
+# Behavior specification (RiskGuard 1.30)
 
 This is the **engineer’s spec** — exact runtime rules. If you are using the EA, start with [USER_GUIDE.md](USER_GUIDE.md) and [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md). Those use the same words as the Inputs dialog.
 
 This document is the source of truth for what RiskGuard does at runtime.
 
-**Current build: 1.28** (`#property version` in `RiskGuard.mq5`). The guardian loop is still the 1.10 tick/timer sweep. On top of that:
+**Current build: 1.30** (`#property version` in `RiskGuard.mq5`). The guardian loop is still the 1.10 tick/timer sweep. On top of that:
 
 - **1.20** — policy Inputs; mechanics always on; extras `0` = never add; day lock on if a limit is `> 0`
 - **1.21** — stop ceiling is a goal, not a reason to close if the broker will not take that stop this tick
@@ -15,6 +15,8 @@ This document is the source of truth for what RiskGuard does at runtime.
 - **1.26** — already-through-stop market-closes; full-close accounting no longer swallowed as a partial; close deviation follows spread; hedge keeps the oldest direction
 - **1.27** — no-trade hours in a chosen clock (Berlin DST default), mapped onto server time; flatten-until-flat while a slot is live
 - **1.28** — no-trade hours on by default (`13:45-15:15,16:00-16:05`); no trading from `OnInit`; unreadable hours fail-closed
+- **1.29** — averaging widens every leg’s stop by `InpAveragingStopFactor` (default 2×) so the first scalp is not stopped at the single-trade 5
+- **1.30** — optional single-trade break-even lock after a % of take-profit (off by default)
 
 ## Event model
 
@@ -84,6 +86,7 @@ Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fail
    2. **Lot cap** (no stop needed) — shrink to MaxLot or close
    3. Auto SL/TP
    4. % risk vs equity (needs the SL that actually landed)
+   5. Break-even lock (single trade only, if the % trigger is set)
 9. Naked SL timeout close (still no stop after 3 seconds).
 10. Time guard (single-leg only; skipped while 2+ trades are open).
 11. Total open risk — close **largest money-risk first**.
@@ -92,11 +95,26 @@ Measuring an *existing* SL may fall back to tick-value if `OrderCalcProfit` fail
 ## Stop loss rules
 
 - If the trade is **already at/through** `InpMaxLossPer001` (floating P/L, or Bid/Ask vs the money-stop price) → **market-close**. Do not plant a stop behind the market.
-- If SL missing → set to `InpMaxLossPer001` (money per 0.01). That is also the farthest the stop may sit.
+- If SL missing → set to the **current** stop money per 0.01. One trade: `InpMaxLossPer001`. Two or more on the symbol while adding is on: that times `InpAveragingStopFactor` (default 2). That is also the farthest the stop may sit in that state.
+- When a second trade opens, existing legs that still have the single-trade stop are **pushed out** to the basket width. New legs get that width from the start. Take-profits are still cleared.
+- Back to one trade: stop money is the normal `InpMaxLossPer001` again. A leftover already past that 5 is closed (hard money-stop).
 - If current SL implies more loss than that → snap as close as the broker allows.
 - If broker min-distance / freeze / requote still leaves it wider, **and you are not yet through the 5** → **keep the tightest legal stop and retry next tick**. Do not close the trade for that.
 - If still naked after timeout → close.
 - Extra width is **not** fixed by reducing lot (loss per 0.01 is a distance). Snap when price allows. Close when price has *used* that distance.
+
+## Break-even lock (optional, single trade)
+
+Off unless `InpBE_TriggerPercent > 0`.
+
+When **exactly one** managed trade is open on the symbol, and floating `profit + swap` ≥ that percent of `InpTP_MoneyPer001` scaled to the lot:
+
+- Compute a profit-side stop whose OrderCalcProfit ≈ `InpBE_LockPer001 + InpCommissionPer001` per 0.01 (so a hit is still green after costs)
+- Move SL there if it is **better** than the stop already on (never pull a lock backwards)
+- 2+ trades: skipped (averaging stop owns the basket)
+- Missing quotes / money math: skip this tick, retry. Do not guess a points BE.
+- A profit-side lock is **not** treated as a too-wide loss stop. Auto-SL will not snap it back to the 5. A later 2+ basket may still push it out to the averaging width.
+- The dead-trade timer still applies. If the trade later sits on the tiny lock (below the 0.50 exempt), max-hold can close it. That is the 180s scalp cap, not a BE bug.
 
 ## Take profit rules
 
@@ -244,7 +262,7 @@ No persistence: when the clock leaves the slot, trading is allowed again.
 
 ## Versioning
 
-EA `#property version` is **1.28**. Any behaviour or layout change must update **all** of these in the same change, and set their version headers to the same number:
+EA `#property version` is **1.30**. Any behaviour or layout change must update **all** of these in the same change, and set their version headers to the same number:
 
 - `RiskGuard.mq5` `#property version` and the Experts start log line
 - `Scripts/RiskGuard_SelfTest.mq5` version + banner

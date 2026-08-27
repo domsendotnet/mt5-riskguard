@@ -259,7 +259,7 @@ void RG_DeleteManagedPendings(const string symbol_filter, const string why)
 double RG_MaxSLDistance(const string symbol, const double lots,
                         const ENUM_ORDER_TYPE otype, const double open_price)
   {
-   double money = RG_ScaledMoneyPer001(InpMaxLossPer001, lots);
+   double money = RG_ScaledMoneyPer001(RG_StopMoneyPer001(symbol), lots);
    double dist = 0.0;
    if(RG_MoneyToDistance(symbol, lots, otype, open_price, money, dist))
       return dist;
@@ -322,7 +322,7 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
    double cur_tp = g_pos.TakeProfit();
 
    int basket = RG_CountManaged(symbol);
-   bool in_basket = (basket >= 2);
+   bool in_basket = (basket >= 2 && RG_PolicyAveragingOn());
 
    double sl_dist = RG_MaxSLDistance(symbol, lots, otype, open_price);
    double max_sl_dist = sl_dist;
@@ -362,8 +362,14 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
       double sl_now = (new_sl > 0.0 ? new_sl : cur_sl);
       if(sl_now > 0.0)
         {
+         bool sl_in_profit =
+            (ptype == POSITION_TYPE_BUY && sl_now > open_price + 1e-12) ||
+            (ptype == POSITION_TYPE_SELL && sl_now < open_price - 1e-12);
          double cur_dist = MathAbs(open_price - sl_now);
-         if(cur_dist > max_sl_dist + RG_TickSize(symbol) * 0.5)
+         // A break-even lock sits on the profit side of entry. Its distance
+         // is not a "too-wide loss stop" — never snap it back to the 5.
+         // A 2+ basket still may push it out to the averaging width below.
+         if(!sl_in_profit && cur_dist > max_sl_dist + RG_TickSize(symbol) * 0.5)
            {
             double snap = (ptype == POSITION_TYPE_BUY) ? (open_price - max_sl_dist)
                                                        : (open_price + max_sl_dist);
@@ -376,6 +382,26 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
               {
                changed = true;
                sl_past_max = true;
+              }
+           }
+         else if(in_basket && sl_dist > 0.0 &&
+                 cur_dist + RG_TickSize(symbol) * 0.5 < sl_dist)
+           {
+            // First-leg 5-stop would kill averaging. Push it out to the
+            // basket width (and the new add gets the same width).
+            double target_sl = (ptype == POSITION_TYPE_BUY) ? (open_price - sl_dist)
+                                                            : (open_price + sl_dist);
+            double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+            double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+            bool through_wide =
+               (ptype == POSITION_TYPE_BUY && bid > 0.0 && bid <= target_sl) ||
+               (ptype == POSITION_TYPE_SELL && ask > 0.0 && ask >= target_sl);
+            if(!through_wide)
+              {
+               new_sl = RG_ClampToStops(symbol, ptype, open_price, target_sl, true);
+               double new_dist = MathAbs(open_price - new_sl);
+               if(new_dist > cur_dist + RG_TickSize(symbol) * 0.5)
+                  changed = true;
               }
            }
         }
@@ -410,6 +436,10 @@ bool RG_ApplyAutoSLTP(const ulong ticket)
       if(sl_past_max)
          RG_Notify(StringFormat("stop on #%s pulled closer to your max loss",
                                 IntegerToString((long)ticket)));
+      else if(in_basket && cur_sl > 0.0 && new_sl > 0.0 &&
+              MathAbs(open_price - new_sl) > MathAbs(open_price - cur_sl) + RG_TickSize(symbol) * 0.5)
+         RG_Notify(StringFormat("stop on #%s moved farther — averaging needs room",
+                                IntegerToString((long)ticket)));
      }
    return true;
   }
@@ -440,7 +470,7 @@ double RG_MaxAllowedLotForRisk(const string symbol, const ENUM_ORDER_TYPE otype,
       double risk = 0.0;
       bool measured = (dist > 0.0 && RG_DistanceToMoney(symbol, mid, otype, open_price, dist, risk));
       if(!measured)
-         risk = RG_ScaledMoneyPer001(InpMaxLossPer001, mid);
+         risk = RG_ScaledMoneyPer001(RG_StopMoneyPer001(symbol), mid);
 
       bool ok = (mid <= InpMaxLot + 1e-8);
       if(InpMaxRiskPercentPerTrade > 0.0 && basis > 0.0)
@@ -501,6 +531,7 @@ void RG_EnforceSize(const ulong ticket)
    ENUM_POSITION_TYPE ptype = g_pos.PositionType();
 
    double sl = g_pos.StopLoss();
+   double tp_now = g_pos.TakeProfit();
    if(sl <= 0.0)
       return; // % risk still needs an SL; lot cap already ran
 
@@ -522,7 +553,7 @@ void RG_EnforceSize(const ulong ticket)
    if(lots >= 0.01 - 1e-8)
      {
       double per001 = risk / (lots / 0.01);
-      if(per001 > InpMaxLossPer001 + 1e-6)
+      if(per001 > RG_StopMoneyPer001(symbol) + 1e-6)
          over_per001 = true;
      }
 
@@ -542,8 +573,7 @@ void RG_EnforceSize(const ulong ticket)
          double snap_dist = MathAbs(open_price - snap);
          if(snap_dist + RG_TickSize(symbol) * 0.5 < cur_dist)
            {
-            double tp = g_pos.TakeProfit();
-            if(RG_ModifySLTP(ticket, snap, tp, "snap SL to max loss/0.01"))
+            if(RG_ModifySLTP(ticket, snap, tp_now, "snap SL to max loss/0.01"))
               {
                if(!g_pos.SelectByTicket(ticket))
                   return;
@@ -586,6 +616,86 @@ void RG_EnforceSize(const ulong ticket)
   }
 
 //+------------------------------------------------------------------+
+// Single trade only. Optional. After the trade has made InpBE_TriggerPercent
+// of the take-profit money, pull SL to break-even + lock (commission included
+// so a hit is still green after costs). Never runs on a 2+ basket — averaging
+// owns those stops. Never moves SL backwards (worse).
+//+------------------------------------------------------------------+
+void RG_EnforceBreakEven(const ulong ticket)
+  {
+   if(!RG_PolicyBreakEvenOn())
+      return;
+   if(!g_pos.SelectByTicket(ticket))
+      return;
+
+   string symbol = g_pos.Symbol();
+   double lots = g_pos.Volume();
+   double open_price = g_pos.PriceOpen();
+   ENUM_POSITION_TYPE ptype = g_pos.PositionType();
+   ENUM_ORDER_TYPE otype = (ptype == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   double cur_sl = g_pos.StopLoss();
+   double cur_tp = g_pos.TakeProfit();
+   double pnl = g_pos.Profit() + g_pos.Swap();
+   if(lots <= 0.0 || open_price <= 0.0)
+      return;
+
+   int n = RG_CountManaged(symbol);
+   if(n != 1)
+      return;
+
+   double tp_goal = RG_ScaledMoneyPer001(InpTP_MoneyPer001, lots);
+   if(tp_goal <= 0.0)
+      return;
+   double trigger = tp_goal * (InpBE_TriggerPercent / 100.0);
+   if(pnl + 1e-8 < trigger)
+      return;
+
+   double lock_per001 = InpBE_LockPer001;
+   if(lock_per001 < 0.0)
+      lock_per001 = 0.0;
+   lock_per001 += InpCommissionPer001;
+   if(lock_per001 < 0.0)
+      lock_per001 = 0.0;
+   double lock_money = RG_ScaledMoneyPer001(lock_per001, lots);
+
+   double dist = 0.0;
+   if(lock_money <= 1e-12)
+      dist = RG_TickSize(symbol);
+   else if(!RG_MoneyToProfitDistance(symbol, lots, otype, open_price, lock_money, dist) || dist <= 0.0)
+      return;
+
+   double be_sl = (ptype == POSITION_TYPE_BUY) ? (open_price + dist)
+                                               : (open_price - dist);
+   be_sl = RG_ClampToStops(symbol, ptype, open_price, be_sl, true);
+
+   if(ptype == POSITION_TYPE_BUY && be_sl <= open_price + 1e-12)
+      return;
+   if(ptype == POSITION_TYPE_SELL && be_sl >= open_price - 1e-12)
+      return;
+
+   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   if(ptype == POSITION_TYPE_BUY && (bid <= 0.0 || be_sl >= bid))
+      return;
+   if(ptype == POSITION_TYPE_SELL && (ask <= 0.0 || be_sl <= ask))
+      return;
+
+   double tick = RG_TickSize(symbol);
+   if(cur_sl > 0.0)
+     {
+      if(ptype == POSITION_TYPE_BUY && cur_sl + tick * 0.5 >= be_sl)
+         return;
+      if(ptype == POSITION_TYPE_SELL && cur_sl - tick * 0.5 <= be_sl)
+         return;
+     }
+
+   if(!RG_ModifySLTP(ticket, be_sl, cur_tp, "break-even lock"))
+      return;
+   RG_Notify(StringFormat("stop on #%s moved to break-even + %.2f/0.01",
+                          IntegerToString((long)ticket), InpBE_LockPer001));
+  }
+
+//+------------------------------------------------------------------+
 // If floating loss (or the quote) is already at/through the money stop,
 // close now. Do NOT plant a stop behind the market — that is how a 5
 // ceiling quietly became a 8–10 loss when the fill had no SL yet.
@@ -604,8 +714,8 @@ void RG_EnforceHardMoneyStop(const ulong ticket)
    ENUM_POSITION_TYPE ptype = g_pos.PositionType();
    ENUM_ORDER_TYPE otype = (ptype == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
 
-   double max_loss = RG_ScaledMoneyPer001(InpMaxLossPer001, lots);
    double pnl = g_pos.Profit() + g_pos.Swap();
+   double max_loss = RG_ScaledMoneyPer001(RG_StopMoneyPer001(symbol), lots);
    bool through = (pnl <= -max_loss);
 
    // Geometric backup when floating P/L has not caught up yet (fresh fill
@@ -1356,6 +1466,9 @@ void RG_GuardianSweep()
       if(!g_pos.SelectByTicket(ticket))
          continue;
       RG_EnforceSize(ticket);
+      if(!g_pos.SelectByTicket(ticket))
+         continue;
+      RG_EnforceBreakEven(ticket);
      }
 
    RG_EnforceNakedSL();
